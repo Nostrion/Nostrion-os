@@ -5,7 +5,7 @@ Written for Claude to follow step by step, and readable by a person. Ask before 
 ## 1. Get the folder
 
 ```
-git clone https://github.com/yuannc12/Nostrion-os ~/Nostrion-os
+git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 ```
 
 Keep the folder name `Nostrion-os`: the Mac app looks for it at `~/Nostrion-os`, next to the app, `~/Desktop/Nostrion-os` or `~/Documents/Nostrion-os`. If the person wants another location, pick one of those.

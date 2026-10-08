@@ -8,9 +8,9 @@ The starter ships with a few example days, people and projects so every page has
 
 Open Claude Code (or Nostrion AI) and paste:
 
-> Install Nostrion-os for me: clone https://github.com/yuannc12/Nostrion-os into ~/Nostrion-os and follow its INSTALL.md step by step.
+> Install Nostrion-os for me: clone https://github.com/Nostrion/Nostrion-os into ~/Nostrion-os and follow its INSTALL.md step by step.
 
-Manual install: `git clone https://github.com/yuannc12/Nostrion-os ~/Nostrion-os`, open that folder as a vault in Obsidian, run `node app/build.js`, open `app/index.html`. Details and the Mac app in `INSTALL.md`.
+Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os`, open that folder as a vault in Obsidian, run `node app/build.js`, open `app/index.html`. Details and the Mac app in `INSTALL.md`.
 
 ## How it works
 

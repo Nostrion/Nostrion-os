@@ -206,7 +206,7 @@ function inline(text, resolve) {
   s = s.replace(/(^|\s)#([a-zA-Z][\w\/-]*)/g, '$1<span class="tag">#$2</span>');
   return s;
 }
-function htmlMeta(src) { // <meta name="ycos:project" content="FBN"> … inside an .html document
+function htmlMeta(src) { // <meta name="ycos:project" content="Acme pilot"> … inside an .html document
   const out = {}; const re = /<meta\s+[^>]*name=["']ycos:([\w-]+)["'][^>]*content=["']([^"']*)["'][^>]*>/gi; let m;
   while ((m = re.exec(src))) out[m[1].toLowerCase()] = m[2].replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
   return out;

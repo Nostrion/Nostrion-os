@@ -55,7 +55,7 @@ Everything hangs off log entries. One file per day, one `##` heading per entry. 
 date: 2026-09-29
 ---
 
-## Call with Jetske about Website relaunch
+## Workshop with the design agency
 project:: [[Website relaunch]]
 category:: meeting
 hours:: 1

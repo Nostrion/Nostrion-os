@@ -1,0 +1,5 @@
+{
+  "publishDir": "",
+  "shareBase": "",
+  "_comment": "Optional, for sharing Library documents with `node app/publish.js`. publishDir: a local folder synced to OneDrive/Dropbox/Drive that receives copies. shareBase: that folder's web address, so the hub can build per-file links. Leave both empty if you do not publish."
+}

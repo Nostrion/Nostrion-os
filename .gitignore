@@ -1,0 +1,8 @@
+.DS_Store
+app/index.html
+app/app.log
+app/publish-state.json
+app/share-links.json
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/

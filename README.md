@@ -46,6 +46,8 @@ Lists (Daily Log, Tasks, Projects, People, Library, Assets, Hours entries) share
 
 Keyboard: `⌘R` rebuild + refresh · `⌘[` / `⌘]` back / forward · `←` `→` previous / next day · `/` or `⌘K` search. Every page has an "edit in Obsidian" link (the Obsidian vault must be named `Nostrion-os`).
 
+**Repos** lists the git repositories next to the vault: every folder in `~` with a `.git` folder (the standard macOS folders are skipped). Per repo: what it is about (first paragraph of its README), project, owner and host, branch, last change, and *copy link* for the GitHub or Codeberg page; the repo page shows the clone address, the local folder and the README. Nothing is stored for this: the hub reads each `.git` folder on every rebuild. A repo belongs to the project whose note has `repo: <folder name or URL>` (a list for several), else to the project with the same name. `app/config.json` → `repos` sets where to look (`roots`), what to skip (`exclude`, e.g. a private vault) and a one-line description for a repo without a useful README (`about`).
+
 ## Formats
 
 ### Log entry (`Log/2026-09-29.md`)
@@ -102,6 +104,7 @@ category: client
 status: active
 started: 2026-09-14
 people: ["[[Lena Bakker]]"]
+repo: website
 ---
 Free notes, decisions, links.
 ```

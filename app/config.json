@@ -1,5 +1,13 @@
 {
   "publishDir": "",
   "shareBase": "",
-  "_comment": "Optional, for sharing Library documents with `node app/publish.js`. publishDir: a local folder synced to OneDrive/Dropbox/Drive that receives copies. shareBase: that folder's web address, so the hub can build per-file links. Leave both empty if you do not publish."
+  "_comment": "Optional, for sharing Library documents with `node app/publish.js`. publishDir: a local folder synced to OneDrive/Dropbox/Drive that receives copies. shareBase: that folder's web address, so the hub can build per-file links. Leave both empty if you do not publish.",
+  "repos": {
+    "roots": [
+      "~"
+    ],
+    "exclude": [],
+    "about": {}
+  },
+  "_comment_repos": "Repos page: git checkouts next to the vault. roots: folders to look in (each child folder with a .git folder is a repo; the standard macOS folders are skipped). exclude: folder names to leave out, e.g. a private vault. about: a one-line description per folder name, used instead of the README."
 }

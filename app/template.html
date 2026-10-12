@@ -195,6 +195,7 @@
   .ext::after{content:" ↗";color:var(--faint);font-size:12px}
   .pub{white-space:nowrap;font-size:13px} .pub.ok{color:#2e7d4f} .pub.warn{color:#b4740f;font-weight:600}
   .mini{display:inline-block;margin-left:6px;padding:1px 7px;font-size:12px;color:#444;background:var(--chip);border-radius:4px;cursor:pointer;vertical-align:1px} .mini:hover{background:var(--text);color:#fff}
+  .clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden} td.nowrap{white-space:nowrap} td.nowrap .mini:first-child{margin-left:0}
   #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--text);color:#fff;font-size:13px;padding:8px 14px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50} #toast.on{opacity:1}
   @media (max-width:900px){.app{grid-template-columns:1fr}.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.card{padding:24px 20px}.top{padding:12px 16px}.content{padding:8px 16px 40px}.fields{grid-template-columns:120px 1fr}}
 </style>
@@ -221,7 +222,7 @@
 const D = window.YCOS; if (!D) { document.getElementById('content').innerHTML = '<div class="card">No data. Run <code>node app/build.mjs</code>.</div>'; return; }
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const by = { person: new Map(D.people.map(x=>[x.id,x])), project: new Map(D.projects.map(x=>[x.id,x])), doc: new Map(D.docs.map(x=>[x.id,x])), asset: new Map(D.assets.map(x=>[x.id,x])), day: new Map(D.days.map(x=>[x.id,x])) };
+const by = { person: new Map(D.people.map(x=>[x.id,x])), project: new Map(D.projects.map(x=>[x.id,x])), doc: new Map(D.docs.map(x=>[x.id,x])), asset: new Map(D.assets.map(x=>[x.id,x])), repo: new Map((D.repos||[]).map(x=>[x.id,x])), day: new Map(D.days.map(x=>[x.id,x])) };
 const entries = new Map(); for (const d of D.days) for (const e of d.entries) entries.set(e.id, e);
 const fmtDate = (s, opts) => { if (!s) return ''; const d = new Date(s + 'T00:00:00'); return d.toLocaleDateString('en-US', opts || { weekday:'short', day:'numeric', month:'short', year:'numeric' }); };
 const wd = (s) => new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'short'});
@@ -242,7 +243,7 @@ const setTitle = (t) => document.title = t ? `${t} — Nostrion-os` : 'Nostrion-
 // ---------- nav ----------
 const NAV = [
   ['today','Today',''], ['grp','Log'], ['journal','Daily Log', D.days.length], ['tasks','Tasks', D.tasks.filter(t=>t.status==='open'||t.status==='doing').length||''], ['hours','Hours', D.totals.hours], ['grp','Vault'],
-  ['projects','Projects',''], ['people','People',''], ['library','Library',''], ['assets','Assets',''],
+  ['projects','Projects',''], ['people','People',''], ['library','Library',''], ['assets','Assets',''], ['repos','Repos',''],
 ];
 function renderNav(active) {
   $('#nav').innerHTML = NAV.map(([k,l,c]) => k==='grp' ? `<div class="grp">${l}</div>` : `<a href="#/${k}" class="${active===k?'active':''}">${l}<small>${c===''?'':c}</small></a>`).join('');
@@ -702,6 +703,7 @@ P.project = (id) => {
     ${p.children.length?sec('Subprojects', p.children.length, `<table class="grid"><tbody>${p.children.map(id=>by.project.get(id)).map(c=>`<tr class="row" onclick="location.hash='#/project/${c.id}'"><td>${esc(c.name)}</td><td class="muted">${esc(c.description)}</td><td class="num" style="width:70px">${c.totalHours||''}</td></tr>`).join('')}</tbody></table>`):''}
     ${(() => { const ts = D.tasks.filter(t=>t.project===id||(p.children.includes(t.project))); const op = ts.filter(isOpen); const done = ts.filter(t=>!isOpen(t)&&t.done).sort((a,b)=>b.done.localeCompare(a.done)).slice(0,5); return ts.length||NATIVE?sec('Tasks' + taskAddBtn({ project: p.name }, '+ task', true), op.length + ' open', (op.map(t=>taskRow(t,{noProject:t.project===id,showPri:true})).join('')||`<div class="empty" style="padding:12px 0">${ts.length?'All done.':'No tasks yet.'}</div>`) + (done.length?`<div class="tm2 muted" style="margin:14px 0 4px;font-size:12px">Recently done</div>${done.map(t=>taskRow(t,{noProject:t.project===id,showPri:true})).join('')}`:'')):''; })()}
     ${docs.length?sec('Library', docs.length, `<table class="grid"><tbody>${docs.map(d=>`<tr class="row" onclick="location.hash='#/doc/${d.id}'"><td class="muted" style="width:110px">${esc(d.category)}</td><td>${esc(d.name)}${d.open?' <span class="ext"></span>':''}</td><td class="muted" style="width:70px">${esc(d.status)}</td><td class="num muted" style="width:100px">${d.added}</td></tr>`).join('')}</tbody></table>`):''}
+    ${(() => { const rs = (D.repos||[]).filter(r=>r.project===id); return rs.length?sec('Repos', rs.length, `<table class="grid"><tbody>${rs.map(r=>`<tr class="row" onclick="location.hash='#/repo/${r.id}'"><td style="width:28%">${esc(r.name)}</td><td class="muted">${esc(r.description)}</td><td style="width:150px;text-align:right">${repoLinkBtns(r)}</td></tr>`).join('')}</tbody></table>`):''; })()}
     ${assets.length?sec('Assets', assets.length, `<table class="grid"><tbody>${assets.map(a=>`<tr class="row" onclick="location.hash='#/asset/${a.id}'"><td class="muted" style="width:110px">${esc(a.ext)}</td><td>${esc(a.name)}</td><td class="num muted" style="width:100px">${a.edited}</td></tr>`).join('')}</tbody></table>`):''}
     ${timeline(p.entries,'Log')}${backlinksHtml('project',id)}` };
 };
@@ -798,6 +800,42 @@ P.asset = (id) => {
     ${isImg?`<p><img src="${fileHref(a.file)}" style="max-width:100%;border-radius:8px"></p>`:''}${a.bodyHtml?`<div class="body">${a.bodyHtml}</div>`:''}
     ${timeline(backlinksOf('asset',id).filter(b=>b.type==='day').map(b=>b.entry),'Mentioned in log')}${backlinksHtml('asset',id)}` };
 };
+// ---------- repos: git checkouts next to the vault (build.js reads ~/<name>/.git; app/config.json → repos) ----------
+window.ycReveal = (ev, path) => { ev.stopPropagation(); ev.preventDefault(); if (NATIVE) NATIVE.postMessage({ reveal: path }); };
+const jsArg = (v) => JSON.stringify(v).replace(/"/g, '&quot;');
+const repoLinkBtns = (r) => r.url ? `<span class="mini" title="Copy ${esc(r.url)}" onclick="ycCopyLink(event, ${jsArg(r.url)})">copy link</span>` : '<span class="muted">no remote</span>';
+const branchHtml = (r) => /^(main|master)$/.test(r.branch) ? `<span class="muted">${esc(r.branch)}</span>` : `<span title="Checked out on a branch other than main">${esc(r.branch)}</span>`;
+P.repos = () => {
+  const R = D.repos || [];
+  const st = fstate('repos', { sort: { k: 'last', d: 'desc' } });
+  const groups = [
+    { k: 'owner', label: 'owner', get: r => r.owner, none: 'no remote' },
+    { k: 'host', label: 'host', get: r => r.host },
+    { k: 'stack', label: 'type', get: r => r.stack },
+    { k: 'proj', label: 'project', get: r => r.project, labelOf: projName, none: 'no project' },
+  ];
+  const F = makeFilter(st, groups, R);
+  const cols = [
+    { k: 'name', l: 'Repo', w: '15%', cls: 'strong', v: r => r.name.toLowerCase(), r: r => esc(r.name) },
+    { k: 'about', l: 'About', v: r => r.description || null, cls: 'muted', r: r => r.description ? `<div class="clamp2" title="${esc(r.description)}">${esc(r.description)}</div>` : '<span style="color:var(--faint)">no README</span>' },
+    { k: 'project', l: 'Project', w: '12%', v: r => r.project ? projName(r.project) : null, r: r => r.project ? link('project', r.project) : '' },
+    { k: 'owner', l: 'Owner', w: '150px', v: r => r.owner || null, r: r => r.owner ? `${esc(r.owner)} <span class="muted">· ${esc(r.host)}</span>` : '<span class="muted">local only</span>' },
+    { k: 'branch', l: 'Branch', w: '100px', v: r => r.branch, r: branchHtml },
+    { k: 'last', l: 'Last change', w: '110px', num: true, cls: 'muted', v: r => r.lastDate, dd: 'desc', r: r => r.lastDate },
+    { k: 'link', l: 'Link', w: '100px', cls: 'nowrap', v: r => r.url || null, r: repoLinkBtns },
+  ];
+  const rows = sortRows(R.filter(F.pass), cols, st.sort, (a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name));
+  return { title:'Repos', wide:true, html:`<h1>Repos<span class="sub">${rows.length} of ${R.length} · git repositories in your home folder</span></h1>${F.html}
+    ${R.length ? tableHtml(cols, rows, st.sort, { href: r => `#/repo/${r.id}`, group: { keys: ['last'], of: r => r.lastDate.slice(0, 7), label: m => month(m + '-01') } }) : emptyHtml('repos','Every folder in <code>~</code> with a <code>.git</code> folder is listed here. Change where to look in <code>app/config.json</code> → <code>repos</code>.')}`,
+    after: () => bindList(st) };
+};
+P.repo = (id) => {
+  const r = by.repo.get(id); if (!r) return notFound('repo', id);
+  const finder = NATIVE ? `<span class="mini" onclick="ycReveal(event, ${jsArg(r.path)})">show in Finder</span>` : '';
+  return { title:r.name, html:`${crumb(true, '', r.url ? `<a class="wl ext" href="${esc(r.url)}" target="_blank">open on ${esc(r.host)}</a>` : '')}<h1>${esc(r.name)}</h1>
+    <dl class="fields">${r.description?`<dt>about</dt><dd>${esc(r.description)}${r.descFrom&&r.descFrom!=='README.md'?` <span class="muted">· from ${r.descFrom==='config'?'app/config.json':esc(r.descFrom)}</span>`:''}</dd>`:''}<dt>link</dt><dd>${r.url?`<a class="wl ext" href="${esc(r.url)}" target="_blank">${esc(r.url)}</a>${repoLinkBtns(r)}`:'<span class="muted">no remote — local only</span>'}</dd>${r.remote?`<dt>clone</dt><dd><code>${esc(r.remote)}</code><span class="mini" title="Copy the clone address" onclick="ycCopyLink(event, ${jsArg(r.remote)})">copy</span></dd>`:''}<dt>folder</dt><dd><code>${esc(r.home)}</code>${finder}</dd><dt>branch</dt><dd>${branchHtml(r)}</dd><dt>last change</dt><dd>${r.lastDate}${r.lastMsg?` <span class="muted">· ${esc(r.lastMsg)}</span>`:''}</dd><dt>type</dt><dd>${esc(r.stack)}</dd>${r.project?`<dt>project</dt><dd>${link('project',r.project)}</dd>`:''}</dl>
+    ${r.readmeHtml?sec('README', null, `<div class="body">${r.readmeHtml}</div>`):`<div class="empty">No README in <code>${esc(r.home)}</code>.</div>`}` };
+};
 P.readme = () => ({ title:'README', html:`${crumb(true,'README.md')}<div class="body">${D.readme}</div>` });
 function notFound(type, id) { return { title:'Not found', html:`${crumb(true)}<h1>Not found</h1><div class="empty">No ${type} with id <code>${esc(id)}</code>. Rebuild the hub if you just added it.</div>` }; }
 
@@ -808,7 +846,7 @@ function route() {
     // HTML document: leave the hub on the page we came from (not on #/doc/…, which would redirect again on Back), then open the file as a new history entry
     history.replaceState(null, '', P._lastHash || '#/library'); location.href = fileHref(d.open); return; } }
   const fn = P[page] || P.today; const r = fn(id);
-  const navKey = { day:'journal', project:'projects', person:'people', doc:'library', asset:'assets' }[page] || page;
+  const navKey = { day:'journal', project:'projects', person:'people', doc:'library', asset:'assets', repo:'repos' }[page] || page;
   renderNav(navKey); setTitle(r.title);
   const c = $('#content'); c.className = 'content' + (r.wide ? ' wide' : '');
   let html = r.html; if (!r.wide) { const i = html.indexOf('</h1>'); html = i >= 0 ? html.slice(0, i+5) + '<div class="panel detail">' + html.slice(i+5) + '</div>' : `<div class="panel detail">${html}</div>`; }
@@ -825,6 +863,7 @@ const idx = [
   ...D.people.map(p=>({type:'person',id:p.id,name:p.name,sub:[p.role,p.organization].filter(Boolean).join(' · '),text:p.text,date:p.lastContact})),
   ...D.projects.map(p=>({type:'project',id:p.id,name:p.name,sub:p.description,text:p.text,date:p.lastActivity})),
   ...D.docs.map(d=>({type:'doc',id:d.id,name:d.name,sub:d.category+(d.project?' · '+(by.project.get(d.project)||{}).name:''),text:(d.text||'')+' '+d.file,date:d.edited})),
+  ...(D.repos||[]).map(r=>({type:'repo',id:r.id,name:r.name,sub:[r.owner,r.host].filter(Boolean).join(' · ')+(r.description?' — '+r.description:''),text:r.description+' '+r.url+' '+r.home,date:r.lastDate})),
   ...D.assets.map(a=>({type:'asset',id:a.id,name:a.name,sub:a.added+' · '+a.ext,text:(a.text||'')+' '+a.file,date:a.added||a.edited})),
   ...D.tasks.map(t=>({type:'task',id:t.id,name:t.search,sub:[t.project?(by.project.get(t.project)||{}).name:'', t.status, t.priority].filter(Boolean).join(' · '),text:t.search,date:t.date,day:t.date,src:t.source})),
   ...[...entries.values()].map(e=>({type:'entry',id:e.id,name:e.title,sub:[e.date, e.projectName, e.category].filter(Boolean).join(' · '),text:e.text,date:e.date,day:e.date})),

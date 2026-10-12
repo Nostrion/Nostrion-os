@@ -535,12 +535,59 @@ const shareLinks = (() => { try { return JSON.parse(io.read(join(ROOT, 'app', 's
 for (const d of docs) if (d.pub.state === 'current' || d.pub.state === 'outdated') { if (shareLinks[d.pubFile]) { d.pub.link = shareLinks[d.pubFile]; d.pub.shared = true; } else if (SHARE_BASE) d.pub.link = SHARE_BASE + '/' + encodeURIComponent(d.pubFile); }
 const pubCounts = { current: docs.filter(d => d.pub.state === 'current').length, outdated: docs.filter(d => d.pub.state === 'outdated').length };
 
+// ---------- git repos next to the vault (~/<name>/.git), read from the .git folder itself: no git or shell needed ----------
+// app/config.json → repos: { roots: ["~"], exclude: ["<folder>"], about: { "<folder>": "one-line description" } }
+// A repo belongs to the project whose note says  repo: <folder name or URL>  (a list for several), else the project with the same name.
+const REPOS = CONFIG.repos || {};
+const repos = [];
+{
+  const roots = (REPOS.roots || ['~']).map(r => String(r).replace(/^~(?=\/|$)/, io.home()).replace(/\/+$/, ''));
+  const exclude = new Set((REPOS.exclude || []).map(String)); const about = REPOS.about || {};
+  // the standard macOS folders are never repos; looking inside them would make the app ask for Desktop / Documents access
+  const MAC_DIRS = new Set(['Applications', 'Desktop', 'Documents', 'Downloads', 'Library', 'Movies', 'Music', 'Pictures', 'Public', 'OneDrive', 'Dropbox', 'Google Drive', 'iCloud Drive']);
+  const tryRead = (p) => { try { return io.exists(p) ? io.read(p).replace(/\r\n/g, '\n') : ''; } catch (e) { return ''; } };
+  // "git@codeberg.org:me/x.git", "ssh://git@host/me/x.git", "https://github.com/me/x.git" → https://host/me/x
+  const webUrl = (u) => { u = String(u || '').trim(); let m = u.match(/^(?:ssh:\/\/)?[\w.-]+@([^:\/]+)[:\/](.+?)(?:\.git)?\/?$/) || u.match(/^https?:\/\/(?:[^@\/]+@)?([^\/]+)\/(.+?)(?:\.git)?\/?$/); return m ? { host: m[1].replace(/:\d+$/, ''), path: m[2], url: 'https://' + m[1].replace(/:\d+$/, '') + '/' + m[2] } : null; };
+  const HOSTS = { 'github.com': 'GitHub', 'codeberg.org': 'Codeberg', 'gitlab.com': 'GitLab', 'bitbucket.org': 'Bitbucket' };
+  // first prose paragraph of a markdown file: skips frontmatter, headings, badges, html, quotes and tables; cut at a sentence near 260 chars
+  const firstPara = (md) => { const body = parseFrontmatter(md).body.replace(/<!--[\s\S]*?-->/g, '').replace(/```[\s\S]*?```/g, ''); const para = [];
+    for (const raw of body.split('\n')) { if (/^\s*<h[1-6]\b/i.test(raw)) { if (para.length) break; continue; } const l = raw.replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim();
+      if (!l) { if (para.length) break; continue; } if (/^(#|>|\||[-*_=]{3,}$|\[!)/.test(l) || /^\[[^\]]*\]\([^)]*\)$/.test(l)) { if (para.length) break; continue; } para.push(l); }
+    let s = para.join(' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+    if (s.length > 260) { const cut = s.slice(0, 260).search(/[.!?](?=\s)[^.!?]*$/); s = cut > 80 ? s.slice(0, cut + 1) : s.slice(0, 257).replace(/\s+\S*$/, '') + '…'; }
+    return s; };
+  // reflog → date of the last change (commit, pull, merge, …) and the subject of the last commit made here (pulls carry none)
+  const lastLog = (log) => { let date = '', msg = ''; for (const l of log.trim().split('\n').reverse()) { const m = l.match(/^\S+ \S+ .*?> (\d+) [+-]\d{4}\t(.*)$/); if (!m || /^checkout:/.test(m[2])) continue;
+    if (!date) date = isoDate(new Date(Number(m[1]) * 1000)); const c = m[2].match(/^commit(?: \((?:merge|amend|initial)\))?:\s*(.*)$/); if (c) { msg = c[1]; break; } }
+    return date ? { date, msg } : null; };
+  for (const root of roots) for (const e of listDir(root)) {
+    if (e.isFile() || exclude.has(e.name) || (root === io.home() && MAC_DIRS.has(e.name))) continue;
+    const dir = join(root, e.name), git = join(dir, '.git'); if (!io.exists(join(git, 'HEAD'))) continue; // .git as a folder only (worktrees and submodules have a .git file)
+    const cfg = tryRead(join(git, 'config')); const remotes = {}; let cur = null;
+    for (const l of cfg.split('\n')) { const s = l.match(/^\s*\[remote\s+"([^"]+)"\]/); if (s) { cur = s[1]; continue; } if (/^\s*\[/.test(l)) { cur = null; continue; } const u = l.match(/^\s*url\s*=\s*(.+)$/); if (cur && u) remotes[cur] = u[1].trim(); }
+    const remote = remotes.origin || Object.values(remotes)[0] || ''; const w = webUrl(remote);
+    const head = tryRead(join(git, 'HEAD')).trim(); const branch = (head.match(/^ref: refs\/heads\/(.+)$/) || [])[1] || head.slice(0, 7);
+    const last = lastLog(tryRead(join(git, 'logs', 'refs', 'heads', branch))) || lastLog(tryRead(join(git, 'logs', 'HEAD')));
+    const has = (n) => io.exists(join(dir, n)); let pkg = {}; try { pkg = has('package.json') ? JSON.parse(io.read(join(dir, 'package.json'))) : {}; } catch (er) {}
+    const readmeName = ['README.md', 'readme.md', 'Readme.md', 'README'].find(has) || ''; const readme = readmeName ? tryRead(join(dir, readmeName)) : '';
+    const descFrom = [['config', about[e.name]], [readmeName, readme && firstPara(readme)], ['package.json', pkg.description], ...['CLAUDE.md', 'AGENTS.md', 'DESIGN.md'].filter(has).map(n => [n, firstPara(tryRead(join(dir, n)))])].find(x => x[1]);
+    const stack = has('.obsidian') ? 'obsidian vault' : has('Cargo.toml') ? 'rust' : has('go.mod') ? 'go' : has('pyproject.toml') || has('requirements.txt') ? 'python' : has('tsconfig.json') ? 'typescript' : has('package.json') ? 'node' : listDir(dir).some(f => f.isFile() && /\.html?$/i.test(f.name)) ? 'html' : 'other';
+    const name = e.name; const projFm = projects.find(p => [].concat(p.fm.repo || []).some(r => { const pw = webUrl(r); return String(r).toLowerCase() === name.toLowerCase() || (pw && w && pw.url.toLowerCase() === w.url.toLowerCase()); }));
+    repos.push({ type: 'repo', id: slug(name), name, path: dir, home: dir.startsWith(io.home() + '/') ? '~' + dir.slice(io.home().length) : dir,
+      remote, url: w ? w.url : '', host: w ? HOSTS[w.host] || w.host : 'local only', owner: w ? w.path.split('/')[0] : '', branch, lastDate: last ? last.date : fileDate(join(git, 'HEAD')), lastMsg: last ? last.msg : '',
+      description: descFrom ? descFrom[1] : '', descFrom: descFrom ? descFrom[0] : '', stack, project: projFm ? projFm.id : (projects.find(p => p.id.replace(/-/g, '') === slug(name).replace(/-/g, '')) || {}).id || null,
+      // relative links in the README (INSTALL.md, docs/) point at the local checkout
+      readmeHtml: readme ? markdown(readme.replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, ''), () => null).replace(/href="(?!https?:|mailto:|#)([^"]+)"/g, (_, h) => 'href="file://' + encodeURI(dir + '/' + h.replace(/^\.\//, '')) + '"') : '' });
+  }
+  repos.sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.name.localeCompare(b.name));
+}
+
 // ---------- output ----------
 const sortByName = (a, b) => a.name.localeCompare(b.name);
 const data = {
   generated: new Date().toISOString(), today: todayStr(), vault: VAULT_NAME, categories: CATEGORIES, libraryCategories: LIBRARY_CATEGORIES,
   priorities: PRIORITIES, tasks: tasks.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || b.date.localeCompare(a.date)),
-  days, people: people.sort(sortByName), projects: projects.sort(sortByName), docs: docs.sort((a, b) => b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name)), assets: assets.sort((a, b) => b.edited.localeCompare(a.edited)),
+  days, repos, people: people.sort(sortByName), projects: projects.sort(sortByName), docs: docs.sort((a, b) => b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name)), assets: assets.sort((a, b) => b.edited.localeCompare(a.edited)),
   weeks: weekList, backlinks: Object.fromEntries(backlinks),
   publish: { dir: PUBLISH_DIR, shareBase: SHARE_BASE, available: pubAvailable, source: pubSource, current: pubCounts.current, outdated: pubCounts.outdated },
   readme: io.exists(join(ROOT, 'README.md')) ? markdown(parseFrontmatter(readMd(join(ROOT, 'README.md'))).body, resolve) : '',
@@ -550,7 +597,7 @@ const json = JSON.stringify(data).replace(/<\/script/gi, '<\\/script');
 const template = io.read(TEMPLATE);
 if (!template.includes('/*__DATA__*/')) throw new Error('template.html is missing the /*__DATA__*/ marker');
 io.write(OUT, template.replace('/*__DATA__*/', () => 'window.YCOS=' + json + ';'));
-return (warnings.length ? warnings.map(w => '⚠ ' + w).join('\n') + '\n' : '') + 'Nostrion-os hub built → app/index.html  (' + days.length + ' days, ' + data.totals.entries + ' entries, ' + data.totals.hours + 'h, ' + people.length + ' people, ' + projects.length + ' projects, ' + docs.length + ' docs, ' + assets.length + ' assets, ' + pubCounts.current + ' published' + (pubCounts.outdated ? ', ' + pubCounts.outdated + ' outdated' : '') + (pubSource === 'folder' ? '' : pubSource === 'record' ? ', publish state from last publish run' : ', publish folder unavailable/no access') + ')';
+return (warnings.length ? warnings.map(w => '⚠ ' + w).join('\n') + '\n' : '') + 'Nostrion-os hub built → app/index.html  (' + days.length + ' days, ' + data.totals.entries + ' entries, ' + data.totals.hours + 'h, ' + people.length + ' people, ' + projects.length + ' projects, ' + docs.length + ' docs, ' + assets.length + ' assets, ' + repos.length + ' repos, ' + pubCounts.current + ' published' + (pubCounts.outdated ? ', ' + pubCounts.outdated + ' outdated' : '') + (pubSource === 'folder' ? '' : pubSource === 'record' ? ', publish state from last publish run' : ', publish folder unavailable/no access') + ')';
 }
 
 // ---------- environments ----------

@@ -86,8 +86,8 @@ Leave a field empty rather than guessing (`people:: `). Write with a quoted here
   - <one or two bullets: what to remember about them>
   ```
   Ask for role/organization only if unknown and it matters, in the same question as step 2.
-- New project mentioned → create `Projects/<Name>.md` with `name`, `description` (one line), `category` (client · product · internal · personal — who the work is for), `status: active`, `parent: "[[Parent]]"` if it belongs under a bigger project (e.g. a subproject of Website relaunch), `started: <first logged day>`, `people: [...]`. If an entry predates a project's `started`, move `started` back to that day.
-- An HTML document produced this session or pointed to by the user (prototype, report, brief, tool) → copy it into `Library/` as `<slug>.html` (slug starting with the project, e.g. `acme-pilot-week-four-report.html`). **No `.md` sidecar.** Put its details as meta tags just before `</head>` (python read-modify-write, don't retype the file):
+- New project mentioned → create `Projects/<Name>.md` with `name`, `description` (one line), `category` (client · product · internal · personal — who the work is for), `status: active` (or `status: idea` when it is only an idea, not started; other statuses: paused · done · archived), `parent: "[[Parent]]"` if it belongs under a bigger project (e.g. a subproject of Website relaunch), `started: <first logged day>`, `people: [...]`. If an entry predates a project's `started`, move `started` back to that day.
+- An HTML document produced this session or pointed to by the user (prototype, report, brief, tool) → copy it into `Library/` as `<YYYY-MM-DD>_<slug>.html`: the day it was made (same as `ycos:added`), an underscore, then a slug starting with the project, e.g. `2026-10-05_acme-pilot-week-four-report.html`. Link it as `[[2026-10-05_acme-pilot-week-four-report]]`. **No `.md` sidecar.** Put its details as meta tags just before `</head>` (python read-modify-write, don't retype the file):
   ```html
   <meta name="ycos:title" content="Acme pilot — week four report">
   <meta name="ycos:category" content="research">
@@ -96,8 +96,8 @@ Leave a field empty rather than guessing (`people:: `). Write with a quoted here
   <meta name="ycos:added" content="2026-09-25">
   ```
   Categories: research · framework · brief · report · tool · reference · post · note, or a new one when none fits (the hub picks any value up automatically; prefer an existing one). Status: live · draft · archived (an old version the user wants to keep → archived, in `Library/`, never in `Assets/` — the builder rejects HTML there). Clicking it in the hub opens the page directly. Link it from the entry with `[[<slug>]]`. Sharing it with others is a separate step: the `publish` skill (`node app/publish.js <slug>`) — only when the user asks.
-- A written note (no HTML) → `Library/<slug>.md` with frontmatter `title`, `category`, `project`, `status`, `added`.
-- Any other file worth keeping (pdf, xlsx, image) → `Assets/`, named `<Project> - <what it is>.<ext>` so it links to the project automatically; add an `Assets/<name>.md` sidecar only if it needs notes.
+- A written note (no HTML) → `Library/<YYYY-MM-DD>_<slug>.md` with frontmatter `title`, `category`, `project`, `status`, `added`.
+- Any other file worth keeping (pdf, xlsx, image) → `Assets/`, named `<YYYY-MM-DD>_<Project> - <what it is>.<ext>` (date the file was made or received) so it sorts by date and links to the project automatically; add a sidecar with the same name and `.md` only if it needs notes. If the build warns about undated files, run `node app/datename.js --apply` (renames and fixes links).
 
 ## 6. Rebuild and report
 

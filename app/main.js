@@ -71,6 +71,8 @@ function ycosMain(root) {
               if (m.copy) { var pb = $.NSPasteboard.generalPasteboard; pb.clearContents; pb.setStringForType($(String(m.copy)), $.NSPasteboardTypeString); }
               if (m.reveal) $.NSWorkspace.sharedWorkspace.selectFileInFileViewerRootedAtPath($(String(m.reveal)), $(''));
               if (m.task) { var tr = ycosTask(YC.root, m.task); ycosLog('task ' + JSON.stringify(tr)); if (!tr.ok) ycosAlert('Nostrion-os task', tr.error); m.rebuild = true; }
+              if (m.status) { var sr = ycosBuildJs(YC.root, 'return editStatus(io, root, arg);', m.status); ycosLog('status ' + JSON.stringify(sr)); if (!sr.ok) ycosAlert('Nostrion-os status', sr.error); m.rebuild = true; }
+              if (m.trash) { var dr = ycosBuildJs(YC.root, 'return trashNote(io, root, arg);', m.trash); ycosLog('trash ' + JSON.stringify(dr)); if (!dr.ok) ycosAlert('Nostrion-os delete', dr.error); m.rebuild = true; }
               if (m.rebuild) { try { YC.status = ycosBuild(YC.root); ycosLog('build ok: ' + YC.status); } catch (e) { ycosLog('build error: ' + (e && e.message || e)); ycosAlert('Nostrion-os build failed', String(e && e.message || e)); } ycosReload(); }
             } catch (e) { ycosLog('message error: ' + e); ycosAlert('Nostrion-os', String(e && e.message || e)); }
           }

@@ -94,6 +94,31 @@ function editTask(io, ROOT, req) {
   return { ok: true, file };
 }
 
+// ---------- note actions (status / delete) — called from the app like editTask ----------
+const NOTE_FILE = /^(Projects|Library|People)\/[^/]+\.md$/; // only markdown notes in these folders; HTML documents keep their meta tags
+// req: {file (vault-relative), status} → rewrites `status:` in the note's frontmatter (added when missing)
+function editStatus(io, ROOT, req) {
+  const file = String(req && req.file || ''); if (!NOTE_FILE.test(file)) return { ok: false, error: 'status can only be set on notes in Projects/, Library/ and People/' };
+  const status = String(req.status || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9 -]*$/.test(status)) return { ok: false, error: 'not a valid status: ' + req.status };
+  const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, error: file + ' no longer exists' };
+  let src = io.read(p); const cr = src.includes('\r\n'); if (cr) src = src.replace(/\r\n/g, '\n');
+  const m = src.match(/^---\n([\s\S]*?)\n---(\n|$)/);
+  if (m) { const fm = m[1].split('\n'); const i = fm.findIndex(l => /^status\s*:/.test(l)); if (i >= 0) fm[i] = 'status: ' + status; else fm.push('status: ' + status); src = '---\n' + fm.join('\n') + '\n---' + src.slice(m[0].length - m[2].length); }
+  else src = '---\nstatus: ' + status + '\n---\n' + src;
+  io.write(p, cr ? src.replace(/\n/g, '\r\n') : src);
+  return { ok: true, file, status };
+}
+// req: {file} → moves the note to <vault>/.trash/ (Obsidian's own trash: recoverable from Finder or Obsidian, and git keeps the history)
+function trashNote(io, ROOT, req) {
+  const file = String(req && req.file || ''); if (!NOTE_FILE.test(file)) return { ok: false, error: 'only notes in Projects/, Library/ and People/ can be deleted from the hub' };
+  const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, error: file + ' no longer exists' };
+  const dir = ROOT + '/.trash'; io.mkdir(dir);
+  const name = file.slice(file.lastIndexOf('/') + 1); let dest = dir + '/' + name;
+  if (io.exists(dest)) dest = dir + '/' + name.replace(/\.md$/, '') + ' ' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.md';
+  io.move(p, dest);
+  return { ok: true, file, trashed: '.trash/' + dest.slice(dir.length + 1) };
+}
+
 function buildVault(io, ROOT) {
 io.pending = stampTasks(io, ROOT); // added:: / done:: on task lines (io.pending → main.js builds again once the file is quiet)
 const join = function () { return Array.prototype.slice.call(arguments).join('/'); };
@@ -109,6 +134,9 @@ const SHARE_BASE = String(CONFIG.shareBase || '').replace(/\/+$/, ''); // web ad
 
 // ---------- helpers ----------
 const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+// Library/ and Assets/ names start with the day the file was made: 2026-10-08_website-relaunch-brief.html (see app/datename.js).
+// undate() splits that off: base is the name without the date, used for titles, project matching and as a link alias.
+const undate = (s) => { const m = String(s).match(/^(\d{4}-\d{2}-\d{2})_(.+)$/); return m ? { date: m[1], base: m[2] } : { date: '', base: String(s) }; };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -193,7 +221,7 @@ function inline(text, resolve) {
   let s = esc(text);
   s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
   s = s.replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, t, alias) => {
-    const target = t.trim(); const label = (alias || target).trim();
+    const target = t.trim(); const label = (alias || undate(target).base).trim(); // a dated file name reads without its date
     const r = resolve(target);
     return r ? `<a class="wl" href="#/${r.type}/${r.id}">${esc(label)}</a>` : `<span class="wl missing" title="no page: ${esc(target)}">${esc(label)}</span>`;
   });
@@ -269,7 +297,7 @@ for (const e of listDir(join(ROOT, 'People'))) {
   const name = data.name || e.name.replace(/\.md$/, '');
   people.push({ type: 'person', id: slug(name), name, stem: e.name.replace(/\.md$/, ''), file: rel(p), edited: fileDate(p),
     role: data.role || '', organization: data.organization || data.org || '', relationship: data.relationship || '',
-    location: data.location || '', email: data.email || '', phone: data.phone || '', linkedin: data.linkedin || '', tags: namesFrom(data.tags), projectNames: namesFrom(data.projects), fm: data, body, entries: [] });
+    location: data.location || '', email: data.email || '', phone: data.phone || '', linkedin: data.linkedin || '', status: data.status || '', tags: namesFrom(data.tags), projectNames: namesFrom(data.projects), fm: data, body, entries: [] });
 }
 for (const e of listDir(join(ROOT, 'Projects'))) {
   if (!e.isFile() || !e.name.endsWith('.md')) continue;
@@ -286,15 +314,27 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
   for (const e of files.filter(f => f.name.endsWith('.md'))) {
     const p = join(dir, e.name); const { data, body } = parseFrontmatter(readMd(p)); const stem = e.name.replace(/\.md$/, '');
     mdStems.add(stem);
-    docs.push({ type: 'doc', id: slug(stem), name: data.title || stem, stem, file: rel(p), edited: fileDate(p),
-      category: data.category || 'note', status: data.status || 'draft', added: data.added ? String(data.added) : fileDate(p),
+    const u = undate(stem);
+    docs.push({ type: 'doc', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p),
+      category: data.category || 'note', status: data.status || 'draft', added: data.added ? String(data.added) : u.date || fileDate(p),
       projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), open: data.file ? 'Library/' + String(data.file).replace(/^Library\//, '') : '', fm: data, body });
   }
   for (const e of files.filter(f => !f.name.endsWith('.md'))) {
     const stem = e.name.replace(/\.[^.]+$/, ''); if (mdStems.has(stem)) continue; // has sidecar → already listed
-    const p = join(dir, e.name); let title = stem; let meta = {};
+    const p = join(dir, e.name); const u = undate(stem); let title = u.base; let meta = {};
     if (/\.html?$/i.test(e.name)) { const src = io.read(p); const m = src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim(); meta = htmlMeta(src); }
-    docs.push({ type: 'doc', id: slug(stem), name: meta.title || title, stem, file: rel(p), edited: fileDate(p), category: meta.category || (/\.html?$/i.test(e.name) ? 'tool' : 'reference'), status: meta.status || 'live', added: meta.added || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '' });
+    docs.push({ type: 'doc', id: slug(stem), name: meta.title || title, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p), category: meta.category || (/\.html?$/i.test(e.name) ? 'tool' : 'reference'), status: meta.status || 'live', added: meta.added || u.date || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '' });
+  }
+  // a folder in Library is one document (a bundle): <name>/<name>.html, or index.html, plus the files it needs (data, assets).
+  // It is published as a folder, so one share link covers everything in it.
+  for (const e of listDir(dir).filter(f => !f.isFile())) {
+    const bdir = join(dir, e.name); const inside = listDir(bdir).filter(f => f.isFile()).map(f => f.name).sort();
+    const ub = undate(e.name);
+    const main = inside.includes(e.name + '.html') ? e.name + '.html' : inside.includes(ub.base + '.html') ? ub.base + '.html' : inside.includes('index.html') ? 'index.html' : inside.find(n => /\.html?$/i.test(n));
+    if (!main) { warnings.push('Library/' + e.name + '/ holds no HTML document — skipped'); continue; }
+    const p = join(bdir, main); const src = io.read(p); let title = ub.base; const m = src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim(); const meta = htmlMeta(src);
+    let edited = fileDate(p); for (const n of inside) { const d2 = fileDate(join(bdir, n)); if (d2 > edited) edited = d2; }
+    docs.push({ type: 'doc', id: slug(e.name), name: meta.title || title, stem: e.name, base: ub.base, dated: ub.date, file: rel(p), edited, category: meta.category || 'tool', status: meta.status || 'live', added: meta.added || ub.date || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '', bundle: e.name, bundleFiles: inside });
   }
 }
 {
@@ -306,15 +346,18 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
     const p = join(dir, e.name); const stem = e.name.replace(/\.[^.]+$/, ''); const st = io.stat(p);
     let data = {}, body = '';
     if (sidecars.has(stem)) ({ data, body } = parseFrontmatter(readMd(join(dir, sidecars.get(stem)))));
-    assets.push({ type: 'asset', id: slug(stem), name: data.title || stem, stem, file: rel(p), edited: isoDate(st.mtime), size: st.size,
+    const u = undate(stem);
+    assets.push({ type: 'asset', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || isoDate(st.mtime), file: rel(p), edited: isoDate(st.mtime), size: st.size,
       ext: (e.name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase(), projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: sidecars.has(stem) ? 'Assets/' + sidecars.get(stem) : '' });
   }
   for (const [stem, mdName] of sidecars) { // sidecar without file → still list as note
     if (assets.some(a => a.stem === stem)) continue;
     const p = join(dir, mdName); const { data, body } = parseFrontmatter(readMd(p));
-    assets.push({ type: 'asset', id: slug(stem), name: data.title || stem, stem, file: rel(p), edited: fileDate(p), size: io.stat(p).size, ext: 'md', projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: rel(p) });
+    const u = undate(stem);
+    assets.push({ type: 'asset', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || fileDate(p), file: rel(p), edited: fileDate(p), size: io.stat(p).size, ext: 'md', projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: rel(p) });
   }
 }
+{ const n = docs.filter(x => !x.dated).length + assets.filter(x => !x.dated).length; if (n) warnings.push(n + ' file' + (n === 1 ? '' : 's') + ' in Library/ or Assets/ without a date in the name — run: node app/datename.js'); }
 for (const e of listDir(join(ROOT, 'Log'))) {
   if (!e.isFile() || !/^\d{4}-\d{2}-\d{2}\.md$/.test(e.name)) continue;
   const p = join(ROOT, 'Log', e.name); const { data, body } = parseFrontmatter(readMd(p)); const date = e.name.slice(0, 10);
@@ -341,6 +384,8 @@ for (const x of people) { register(x.name, 'person', x.id); register(x.stem, 'pe
 for (const x of projects) { register(x.name, 'project', x.id); register(x.stem, 'project', x.id); }
 for (const x of docs) { register(x.name, 'doc', x.id); register(x.stem, 'doc', x.id); }
 for (const x of assets) { register(x.name, 'asset', x.id); register(x.stem, 'asset', x.id); }
+// the name without its date still resolves (an older [[website-relaunch-brief]] link), unless something else already has that name
+for (const x of [...docs, ...assets]) if (x.dated && !index.has(x.base.toLowerCase())) register(x.base, x.type, x.id);
 for (const x of days) register(x.date, 'day', x.id);
 register('README', 'readme', 'readme');
 const resolve = (name) => index.get(String(name).replace(/\.md$/, '').toLowerCase()) || null;
@@ -422,13 +467,13 @@ for (const x of projects) {
 }
 const projectByPrefix = (stem) => { const st = slug(stem); let best = null; for (const pr of projects) { const ps = pr.id; if ((st === ps || st.startsWith(ps + '-')) && (!best || ps.length > best.length)) best = ps; } return best; };
 for (const x of docs) {
-  x.project = ref(x.projectName, 'project') || (x.projectName ? null : projectByPrefix(x.stem));
+  x.project = ref(x.projectName, 'project') || (x.projectName ? null : projectByPrefix(x.base));
   if (x.project) byId.project.get(x.project).docs.push(x.id);
   for (const m of wikiTargets(x.body)) { const r = resolve(m); if (r) addBack(r, { type: 'doc', id: x.id, label: x.name }); }
   x.bodyHtml = markdown(x.body, resolve); x.text = plain(x.body); delete x.body;
 }
 for (const x of assets) {
-  x.project = ref(x.projectName, 'project') || (x.projectName ? null : projectByPrefix(x.stem));
+  x.project = ref(x.projectName, 'project') || (x.projectName ? null : projectByPrefix(x.base));
   for (const m of wikiTargets(x.body)) { const r = resolve(m); if (r) addBack(r, { type: 'asset', id: x.id, label: x.name }); }
   x.bodyHtml = markdown(x.body, resolve); x.text = plain(x.body); delete x.body;
 }
@@ -456,6 +501,9 @@ const TEXT_EXT = /\.(md|html?|txt|csv|json|svg|xml)$/i;
 // true / false, or null when the copy cannot be read (macOS denies the app access to OneDrive files until allowed under
 // System Settings → Privacy & Security → Files and Folders) — never report "outdated" on a failed read.
 const sameFile = (a, b) => { try { const sa = io.stat(a), sb = io.stat(b); if (sa.size !== sb.size) return false; return TEXT_EXT.test(a) ? io.read(a) === io.read(b) : true; } catch (e) { return null; } };
+// a bundle (Library/<name>/) is current when the published folder holds exactly its files, each identical
+const sameBundle = (abs, copy, files) => { try { const have = listDir(copy).filter(e => e.isFile()).map(e => e.name); if (have.length !== files.length) return false; for (const n of files) { if (!have.includes(n)) return false; const s = sameFile(join(abs, n), join(copy, n)); if (s !== true) return s; } return true; } catch (e) { return null; } };
+const bundleSig = (abs, files) => { let size = 0; const parts = []; for (const n of files) { const p = join(abs, n); const st = io.stat(p); size += st.size; parts.push(n + ':' + st.size + ':' + (TEXT_EXT.test(n) ? hashText(io.read(p)) : '')); } return { size, hash: hashText(parts.join('|')) }; };
 let pubNames = null; // listing of the Publish folder, null when missing or not readable
 if (PUBLISH_DIR && io.exists(PUBLISH_DIR)) { try { const l = io.list(PUBLISH_DIR); pubNames = l ? new Set(l.map(e => e.name)) : null; } catch (e) { pubNames = null; } }
 // fallback: what publish.js recorded about the copies the last time it ran (size, hash, date) — used when the folder cannot be read
@@ -464,14 +512,21 @@ const pubSource = pubNames ? 'folder' : pubRecord ? 'record' : 'none';
 const pubAvailable = pubSource !== 'none';
 const fromRecord = (d, abs) => { // compare the vault file with the recorded copy
   const r = pubRecord && pubRecord[d.pubFile]; if (!r) return { state: 'none' };
-  try { const st = io.stat(abs); let same = st.size === r.size; if (same && r.hash && TEXT_EXT.test(abs)) same = hashText(io.read(abs)) === r.hash;
+  try { let same;
+    if (d.bundle) { const sig = bundleSig(abs, d.bundleFiles); same = sig.size === r.size && (!r.hash || sig.hash === r.hash); }
+    else { const st = io.stat(abs); same = st.size === r.size; if (same && r.hash && TEXT_EXT.test(abs)) same = hashText(io.read(abs)) === r.hash; }
     return { state: same ? 'current' : 'outdated', date: r.published || '', via: 'record' }; } catch (e) { return { state: 'unavailable' }; }
 };
+// a copy keeps the name it was first published under (links already shared keep working), so look it up by its vault source:
+// the name publish.js recorded for this source, else the file name, else the file name without its date
+const recBySource = new Map(Object.entries(pubRecord || {}).map(([k, r]) => [r.source, k]));
 for (const d of docs) {
-  const src = d.open || d.file; d.pubFile = src.split('/').pop(); const copy = join(PUBLISH_DIR, d.pubFile); const abs = join(ROOT, src);
+  const src = d.open || d.file; const own = d.bundle || src.split('/').pop();
+  const cands = [recBySource.get(d.bundle ? 'Library/' + d.bundle : src), own, undate(own).base].filter(Boolean);
+  d.pubFile = (pubNames && cands.find(n => pubNames.has(n))) || cands[0]; const copy = join(PUBLISH_DIR, d.pubFile); const abs = d.bundle ? join(ROOT, 'Library', d.bundle) : join(ROOT, src);
   if (pubSource === 'folder') {
     if (!pubNames.has(d.pubFile)) d.pub = { state: 'none' };                              // never published
-    else { const same = sameFile(abs, copy); let date = ''; try { date = fileDate(copy); } catch (e) {}
+    else { const same = d.bundle ? sameBundle(abs, copy, d.bundleFiles) : sameFile(abs, copy); let date = ''; try { date = fileDate(copy); } catch (e) {}
       d.pub = same === null ? (pubRecord ? fromRecord(d, abs) : { state: 'unavailable', date }) : { state: same ? 'current' : 'outdated', date }; }
   } else if (pubSource === 'record') d.pub = fromRecord(d, abs);
   else d.pub = { state: 'unavailable' };                                                  // no folder, no record → unknown
@@ -506,6 +561,8 @@ function nodeIO() {
     home: () => require('os').homedir(),
     read: (p) => fs.readFileSync(p, 'utf8'),
     write: (p, s) => fs.writeFileSync(p, s),
+    mkdir: (p) => fs.mkdirSync(p, { recursive: true }),
+    move: (a, b) => fs.renameSync(a, b),
     stat: (p) => { const s = fs.statSync(p); return { mtime: s.mtime, size: s.size }; },
     list: (dir) => fs.readdirSync(dir, { withFileTypes: true }).map(e => ({ name: e.name, isFile: () => e.isFile() })),
   };
@@ -518,13 +575,15 @@ function jxaIO() { // macOS: osascript -l JavaScript (JavaScript for Automation)
     home: () => ObjC.unwrap($.NSHomeDirectory()),
     read: (p) => { const s = $.NSString.stringWithContentsOfFileEncodingError(p, $.NSUTF8StringEncoding, null); if (s.isNil()) throw new Error('cannot read ' + p); return ObjC.unwrap(s); },
     write: (p, s) => { const ok = $(s).writeToFileAtomicallyEncodingError(p, true, $.NSUTF8StringEncoding, null); if (!ok) throw new Error('cannot write ' + p); },
+    mkdir: (p) => { fm.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(p, true, $(), null); },
+    move: (a, b) => { const ok = fm.moveItemAtPathToPathError(a, b, null); if (!ok) throw new Error('cannot move ' + a + ' to ' + b); },
     stat: (p) => { const a = fm.attributesOfItemAtPathError(p, null); return { mtime: new Date(a.fileModificationDate.timeIntervalSince1970 * 1000), size: Number(a.fileSize) }; },
     list: (dir) => ObjC.deepUnwrap(fm.contentsOfDirectoryAtPathError(dir, null)).map(name => { const isDir = Ref(); fm.fileExistsAtPathIsDirectory(dir + '/' + name, isDir); return { name, isFile: () => !isDir[0] }; }),
   };
 }
 
 if (typeof require === 'function' && typeof module !== 'undefined') {           // Node
-  module.exports = { buildVault, nodeIO, hashText, editTask, stampTasks };
+  module.exports = { buildVault, nodeIO, hashText, editTask, editStatus, trashNote, stampTasks };
   const path = require('path');
   if (require.main === module || /build\.m?js$/.test(String(process.argv[1] || ''))) { // run directly (node app/build.js [vault]) — not when required by publish.js
     console.log(buildVault(nodeIO(), path.resolve(process.argv[2] || path.join(__dirname, '..'))));

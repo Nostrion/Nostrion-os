@@ -196,6 +196,10 @@
   tr.row.dim td{color:var(--ink-soft)}
   tr.grp td{padding:26px 10px 8px 0;font-size:18px;font-weight:400;color:var(--ink);border-bottom:1px solid var(--line);background:var(--paper)}
   tr.grp td small{font-size:13px;color:var(--ink-soft);margin-left:var(--s3)}
+  tr.grp[data-fold] td{cursor:pointer;user-select:none} tr.grp[data-fold]:hover td{color:var(--accent)}
+  tr.grp .caret{display:inline-block;width:7px;height:7px;border-right:1.5px solid var(--ink-dim);border-bottom:1.5px solid var(--ink-dim);transform:rotate(45deg);margin:0 12px 4px 2px;transition:transform var(--t-fast)}
+  tr.grp.shut .caret{transform:rotate(-45deg);margin-bottom:1px}
+  tr.gh{display:none}
   tr.grp:first-child td{padding-top:var(--s2)}
   tr.total td{color:var(--ink);border-bottom:0;border-top:1px solid var(--black)}
   td.indent{padding-left:22px}
@@ -627,10 +631,11 @@ function sortRows(rows, cols, sort, tie) { const c = cols.find(x => x.k === sort
 // cols: {k, l, w?, num?, cls?, v(row) → sort value, r(row) → cell html, dd? default direction}; opts: {href(row), group:{keys, of(row), label(key) → html}, rowCls(row), attr(row), empty}
 function tableHtml(cols, rows, sort, opts = {}) {
   const head = cols.map(c => { const on = sort && sort.k === c.k; return `<th class="${sort ? 'sortable' : ''} ${on ? 'sorted' : ''} ${c.num ? 'num' : ''}" ${sort ? `data-k="${c.k}" data-d="${c.dd || (c.num ? 'desc' : 'asc')}"` : ''}>${esc(c.l)}${on ? `<span class="arr">${sort.d === 'asc' ? '↑' : '↓'}</span>` : ''}</th>`; }).join('');
-  let body = '', cur = null; const grouping = opts.group && (!sort || opts.group.keys.includes(sort.k));
+  let body = '', cur = null, shut = false; const grouping = opts.group && (!sort || opts.group.keys.includes(sort.k));
+  const fold = grouping && opts.st ? (opts.st.fold = Array.isArray(opts.st.fold) ? opts.st.fold : []) : null; // groups fold like folders; closed ones are remembered
   for (const r of rows) {
-    if (grouping) { const gk = opts.group.of(r); if (gk !== cur) { cur = gk; body += `<tr class="grp"><td colspan="${cols.length}">${opts.group.label(gk)}</td></tr>`; } }
-    body += `<tr class="${opts.href || opts.attr ? 'row' : ''} ${opts.rowCls ? opts.rowCls(r) : ''}" ${opts.href ? `onclick="if(!event.target.closest('.dd,.rowact'))location.hash='${opts.href(r)}'"` : ''} ${opts.attr ? opts.attr(r) : ''}>${cols.map(c => { const v = c.r(r); return `<td class="${c.num ? 'num' : ''} ${typeof c.cls === 'function' ? c.cls(r) : c.cls || ''}" ${typeof c.style === 'function' ? `style="${c.style(r)}"` : ''}>${v === '' || v == null ? dash : v}</td>`; }).join('')}</tr>`;
+    if (grouping) { const gk = opts.group.of(r); if (gk !== cur) { cur = gk; shut = !!fold && fold.includes(String(gk)); body += `<tr class="grp ${shut ? 'shut' : ''}"${fold ? ` data-fold="${esc(String(gk))}" title="${shut ? 'Open' : 'Close'} this group"` : ''}><td colspan="${cols.length}">${fold ? '<span class="caret"></span>' : ''}${opts.group.label(gk)}</td></tr>`; } }
+    body += `<tr class="${opts.href || opts.attr ? 'row' : ''} ${shut ? 'gh' : ''} ${opts.rowCls ? opts.rowCls(r) : ''}" ${opts.href ? `onclick="if(!event.target.closest('.dd,.rowact'))location.hash='${opts.href(r)}'"` : ''} ${opts.attr ? opts.attr(r) : ''}>${cols.map(c => { const v = c.r(r); return `<td class="${c.num ? 'num' : ''} ${typeof c.cls === 'function' ? c.cls(r) : c.cls || ''}" ${typeof c.style === 'function' ? `style="${c.style(r)}"` : ''}>${v === '' || v == null ? dash : v}</td>`; }).join('')}</tr>`;
   }
   return `<div class="tscroll"><table class="grid fx"><colgroup>${cols.map(c => c.w ? `<col style="width:${c.w}">` : '<col>').join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="dim">${opts.empty || 'Nothing matches these filters.'}</td></tr>`}</tbody></table></div>`;
 }
@@ -647,6 +652,8 @@ function bindList(st, extra) { // filters, reset, sortable headers, segmented co
     else { const cur = G._sel.slice(); const i = cur.indexOf(v); if (i >= 0) cur.splice(i, 1); else cur.push(v); hide(cur); }
     saveFS(); route();
   }));
+  c.querySelectorAll('tr.grp[data-fold]').forEach(tr => tr.addEventListener('click', () => { const k = tr.dataset.fold; const i = st.fold.indexOf(k); if (i >= 0) st.fold.splice(i, 1); else st.fold.push(k); saveFS(); route(); }));
+  c.querySelectorAll('[data-foldall]').forEach(b => b.addEventListener('click', () => { const keys = JSON.parse(b.dataset.foldall); st.fold = st.fold && st.fold.length >= keys.length ? [] : keys; saveFS(); route(); }));
   c.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', () => { const k = th.dataset.k; st.sort = st.sort && st.sort.k === k ? { k, d: st.sort.d === 'asc' ? 'desc' : 'asc' } : { k, d: th.dataset.d || 'asc' }; saveFS(); route(); }));
   c.querySelectorAll('.seg.modes').forEach(m => m.addEventListener('click', ev => { const ch = ev.target.closest('[data-k]'); if (!ch) return; st[ch.dataset.k] = ch.dataset.v; saveFS(); route(); }));
   if (extra) extra();
@@ -836,7 +843,7 @@ P.journal = () => {
     const sorted = sortRows(rows, cols, st.sort, (a, b) => b.date.localeCompare(a.date)).map((r, i) => [r, i]).sort(([a, i], [b, j]) => order.indexOf(a.project) - order.indexOf(b.project) || i - j).map(([r]) => r);
     const total = r1(rows.reduce((s, r) => s + r.hours, 0));
     return { title: 'Daily Log', sub: `${days.length} of ${D.days.length} days · ${order.length} projects · ${total}h`,
-      html: `${controls(F.html, groupSeg)}${tableHtml(cols, sorted, st.sort, { href: r => `#/day/${r.id}`, group: { keys: cols.map(c => c.k), of: r => r.project, label: k => grpLabel(k ? projName(k) : 'No project', `${plural(tot[k].n, 'day')} · ${r1(tot[k].h)}h`) } })}`,
+      html: `${controls(F.html, groupSeg)}${tableHtml(cols, sorted, st.sort, { href: r => `#/day/${r.id}`, st, group: { keys: cols.map(c => c.k), of: r => r.project, label: k => grpLabel(k ? projName(k) : 'No project', `${plural(tot[k].n, 'day')} · ${r1(tot[k].h)}h`) } })}`,
       after: () => bindList(st) };
   }
   const wkOf = (d) => { const W = D.weeks.find(w => w.days.includes(d.date)); return W ? W.week : ''; };
@@ -854,7 +861,7 @@ P.journal = () => {
   const group = st.groupBy === 'week' ? { keys: ['date'], of: wkOf, label: w => w ? grpLabel('Week ' + w.replace(/^\d{4}-W?/, ''), `${w.slice(0, 4)} · ${wkHours(w)}`) : '' }
     : st.groupBy === 'month' ? { keys: ['date'], of: d => d.date.slice(0, 7), label: m => grpLabel(month(m + '-01'), mHours(m)) } : null;
   return { title:'Daily Log', sub: `${rows.length} of ${D.days.length} days · ${hrs}h`,
-    html: `${controls(F.html, groupSeg)}${tableHtml(cols, rows, st.sort, { href: d => `#/day/${d.id}`, group })}`,
+    html: `${controls(F.html, groupSeg)}${tableHtml(cols, rows, st.sort, { href: d => `#/day/${d.id}`, st, group })}`,
     after: () => bindList(st) };
 };
 P.day = (id) => {
@@ -985,7 +992,7 @@ P.projects = () => {
   return { title: 'Projects', sub, html: `${controls(stages, F.html, groupSeg)}
     ${!D.projects.length ? emptyHtml('projects', 'Create <code>Projects/Name.md</code> (see README) or mention <code>project:: [[Name]]</code> in a log entry and ask /worklog to create it.')
       : !pool.length ? `<div class="empty">${emptyMsg}</div>`
-      : tableHtml(cols, rows, st.sort, { href: p => `#/project/${p.id}`, rowCls: p => ['paused', 'done', 'archived', 'idea'].includes(p.status) && !record ? 'dim' : '', group: groupBy !== 'none' && tree ? { keys: ['tree'], of: p => p._grp, label: gLabel } : null })}
+      : tableHtml(cols, rows, st.sort, { href: p => `#/project/${p.id}`, st, rowCls: p => ['paused', 'done', 'archived', 'idea'].includes(p.status) && !record ? 'dim' : '', group: groupBy !== 'none' && tree ? { keys: ['tree'], of: p => p._grp, label: gLabel } : null })}
     ${tree ? '' : '<p class="hint">Sorted flat. Click <b>Project</b> to return to the grouped tree.</p>'}`,
     after: () => bindList(st) };
 };
@@ -1057,16 +1064,24 @@ P.library = () => {
     { k: 'added', l: 'Added', w: '100px', num: true, cls: 'dim', v: d => d.added, dd: 'desc', r: d => d.added },
     { k: 'edited', l: 'Edited', w: '100px', num: true, cls: 'dim', v: d => d.edited, dd: 'desc', r: d => d.edited },
   ];
-  const rows = sortRows(D.docs.filter(F.pass), cols, st.sort, (a, b) => b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name));
-  const dateKey = st.sort.k === 'added' ? 'added' : 'edited';
+  const by_ = st.groupBy || 'project'; const dateKey = st.sort.k === 'added' ? 'added' : 'edited';
+  const keyOf = { project: d => d.project || '', category: d => d.category || '', month: d => d[dateKey].slice(0, 7), status: d => d.status || '' }[by_];
+  let rows = sortRows(D.docs.filter(F.pass), cols, st.sort, (a, b) => b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name));
+  const cnt = {}; if (keyOf) for (const d of rows) cnt[keyOf(d)] = (cnt[keyOf(d)] || 0) + 1;
+  const rank = (k) => by_ === 'month' ? 0 : by_ === 'category' ? ordIdx(D.libraryCategories, k) : by_ === 'status' ? ordIdx(['live', 'draft', 'archived'], k) : k ? 0 : 99;
+  const order = keyOf ? [...new Set(rows.map(keyOf))].sort((a, b) => rank(a) - rank(b) || (by_ === 'month' ? b.localeCompare(a) : by_ === 'project' ? projName(a).localeCompare(projName(b)) : a.localeCompare(b))) : [];
+  if (keyOf) rows = rows.map((d, i) => [d, i]).sort(([a, i], [b, j]) => order.indexOf(keyOf(a)) - order.indexOf(keyOf(b)) || i - j).map(([d]) => d);
+  const label = (k) => { const n = `<small>${plural(cnt[k] || 0, 'document')}</small>`;
+    return by_ === 'project' ? `${k ? esc(projName(k)) : 'No project'}${n}` : by_ === 'category' ? `<span class="cat" style="font-size:inherit;color:inherit">${swatch(k)}${esc(k || 'No category')}</span>${n}` : by_ === 'status' ? `${esc(k ? k[0].toUpperCase() + k.slice(1) : 'No status')}${n}` : `${esc(month(k + '-01'))}${n}`; };
+  const foldAll = keyOf && order.length > 1 ? `<span class="freset" data-foldall="${esc(JSON.stringify(order.map(String)))}">${(st.fold || []).length >= order.length ? 'Open all' : 'Close all'}</span>` : '';
   return { title:'Library', sub: `${rows.length} of ${D.docs.length} · documents, notes, prototypes and tools`,
-    html: `${controls(F.html)}${D.docs.length ? tableHtml(cols, rows, st.sort, { href: d => `#/doc/${d.id}`, rowCls: d => d.status === 'archived' ? 'dim' : '', group: { keys: ['added', 'edited'], of: d => d[dateKey].slice(0, 7), label: m => grpLabel(month(m + '-01')) } }) : emptyHtml('documents','Drop an <code>.html</code> or <code>.md</code> in <code>Library/</code>.')}`,
+    html: `${controls(F.html, '<span class="spacer"></span>', foldAll, '<span class="ctl-l">Group</span>', segOf({ ...st, groupBy: by_ }, 'groupBy', [['project', 'Project'], ['category', 'Category'], ['month', 'Month'], ['status', 'Status'], ['none', 'None']]))}${D.docs.length ? tableHtml(by_ === 'project' ? cols.filter(c => c.k !== 'project') : cols, rows, st.sort, { href: d => `#/doc/${d.id}`, rowCls: d => d.status === 'archived' ? 'dim' : '', st, group: keyOf ? { keys: cols.map(c => c.k), of: keyOf, label } : null }) : emptyHtml('documents','Drop an <code>.html</code>, <code>.md</code> or a document file (pdf, Office…) in <code>Library/</code>.')}`,
     after: () => bindList(st) };
 };
 P.doc = (id) => {
   const d = by.doc.get(id); if (!d) return notFound('doc', id);
   const isMd = d.file.endsWith('.md'); const pubd = (d.pub||{}).state==='current'||(d.pub||{}).state==='outdated';
-  const extra = []; if (d.open) extra.push({ label: 'Open', href: fileHref(d.open), primary: !isMd });
+  const extra = []; if (d.open) extra.push({ label: d.external ? 'Open from OneDrive' : 'Open', href: fileHref(d.open), primary: !isMd || d.external });
   if (d.pub && d.pub.link) extra.push({ label: 'Copy share link', on: `ycCopy(event, ${jsArg(d.pub.link)}, 'Link copied')` });
   if (pubd && NATIVE) extra.push({ label: 'Show shared copy in Finder', on: `ycReveal(event, ${jsArg(D.publish.dir+'/'+d.pubFile)})` });
   return { title: d.name, crumbs: [['Library', '#/library']], sub: [catHtml(d.category), d.project ? link('project', d.project) : ''].filter(Boolean).join('<span class="sep">·</span>'), acts: noteActs(d.file, extra, d.bundle ? 'Library/' + d.bundle : d.open || d.file),
@@ -1118,7 +1133,7 @@ P.assets = () => {
     html: `${controls(segOf(st, 'view', [['cards','Cards'],['table','Table']]), F.html, '<span class="spacer"></span>', sortSeg, '<span class="ctl-l">Group</span>', segOf(st, 'groupBy', groupOpts))}
     ${!D.assets.length ? emptyHtml('assets','Brand files go in <code>Assets/Brand Asset/</code>, images used in notes in <code>Assets/Attachment/</code> (Obsidian puts pasted images there). Documents such as PDFs belong in Library. Add <code>name.md</code> next to a file for notes and links.')
       : !rows.length ? '<div class="empty">Nothing matches these filters.</div>'
-      : st.view === 'table' ? tableHtml(cols, rows, st.sort, { href: a => `#/asset/${a.id}`, group: keyOf ? { keys: cols.map(c => c.k), of: keyOf, label } : null })
+      : st.view === 'table' ? tableHtml(cols, rows, st.sort, { href: a => `#/asset/${a.id}`, st, group: keyOf ? { keys: cols.map(c => c.k), of: keyOf, label } : null })
       : cardsHtml()}`,
     after: () => bindList(st, () => $('#content').querySelector('.sortseg')?.addEventListener('click', ev => { const b = ev.target.closest('[data-v]'); if (!b) return; const k = b.dataset.v; st.sort = { k, d: k === 'name' ? 'asc' : 'desc' }; saveFS(); route(); })) };
 };
@@ -1159,7 +1174,7 @@ P.repos = () => {
   const group = { keys: ['last'], of: r => r.lastDate.slice(0, 7), label: m => grpLabel(month(m + '-01')) };
   return { title:'Repos', sub: `${rows.length} of ${R.length} · git repositories next to the vault`,
     html: `${controls(F.html)}
-    ${R.length ? tableHtml(cols, rows, st.sort, { href: r => `#/repo/${r.id}`, group }) : emptyHtml('repos','Every folder with a <code>.git</code> folder in the folders under Settings → Repositories is listed here.')}`,
+    ${R.length ? tableHtml(cols, rows, st.sort, { href: r => `#/repo/${r.id}`, st, group }) : emptyHtml('repos','Every folder with a <code>.git</code> folder in the folders under Settings → Repositories is listed here.')}`,
     after: () => bindList(st) };
 };
 
@@ -1317,7 +1332,8 @@ function editorBind(file) {
 const NAVOF = { day:'journal', project:'projects', person:'people', doc:'library', asset:'assets', repo:'repos', readme:'settings' };
 function route() {
   const hash = location.hash.replace(/^#\/?/, '') || 'today'; const [page, ...rest] = hash.split('/'); const id = decodeURIComponent(rest.join('/'));
-  if (page === 'doc') { const d = by.doc.get(id); if (d && d.open && !d.bodyHtml) {
+  if (page === 'doc') { const d = by.doc.get(id); if (d && d.open && d.external && !d.bodyHtml && NATIVE) { history.replaceState(null, '', P._lastHash || '#/library'); NATIVE.postMessage({ open: fileHref(d.open) }); return; }
+    if (d && d.open && !d.bodyHtml) {
     // HTML document: leave the hub on the page we came from (not on #/doc/…, which would redirect again on Back), then open the file
     history.replaceState(null, '', P._lastHash || '#/library'); location.href = fileHref(d.open); return; } }
   if (page !== 'edit' && ED.file) { ED.file = null; ED.base = null; if (NATIVE) NATIVE.postMessage({ editing: false }); }
@@ -1391,7 +1407,7 @@ document.addEventListener('keydown', (ev) => {
 // inside the app (WKWebView): external links, files and obsidian:// go to the Mac
 document.addEventListener('click', (ev) => {
   const a = ev.target.closest('a'); if (!a || !NATIVE) return; const href = a.getAttribute('href') || '';
-  if (/^(obsidian:|https?:|mailto:|tel:)/.test(href) || a.target === '_blank') { ev.preventDefault(); NATIVE.postMessage({ open: a.href }); }
+  if (/^(obsidian:|https?:|mailto:|tel:|file:)/.test(href) || a.target === '_blank') { ev.preventDefault(); NATIVE.postMessage({ open: a.href }); }
 });
 window.addEventListener('focus', () => { if (NATIVE && !ED.file && Date.now() - (window.__lastFocusBuild||0) > 15000) { window.__lastFocusBuild = Date.now(); keepScroll(); NATIVE.postMessage({ rebuild: true }); } });
 route();

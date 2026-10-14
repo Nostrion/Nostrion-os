@@ -180,6 +180,8 @@ Drop a brand file in `Assets/Brand Asset/` or an image for a note in `Assets/Att
 
 ## Publishing (sharing a document)
 
+**One copy only.** Publishing *moves* a document (an HTML file, a folder document, a PDF or Office file) to the Publish folder and leaves a link note with the same name in `Library/` (`file:` points at the OneDrive copy, title/category/project/status come along). The hub lists it as before; **Open from OneDrive** opens the shared file, and from then on you edit it there. A Markdown note is the exception: it stays in the vault and the Publish folder gets a copy. `node app/publish.js --remove <name>` brings a moved document back into `Library/`.
+
 The vault is the only source of truth and never moves. To share a Library document, **publish** it: a copy goes to the shared folder set in `app/config.json` (OneDrive, Dropbox, Drive) (`your synced folder`), and you make the share link from there (Finder → right-click → Share → Copy Link). Copies keep the vault file name. Never edit a copy — change the vault file and publish again.
 
 ```

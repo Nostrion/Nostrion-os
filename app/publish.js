@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Publish — copy Library documents into the Publish folder (OneDrive, see app/config.json) so a share link can be made.
-// The vault stays the single source of truth; the Publish folder only ever holds copies, named like the vault file.
+// Publish — move a Library document into the Publish folder (OneDrive, see app/config.json) so a share link can be made.
+// One copy only: the file (or folder document) moves to OneDrive and Library keeps a link note with the same name, whose
+// `file:` points at it; the hub lists it as before and opens the OneDrive file. Edit a published document in OneDrive.
+// Markdown notes are the exception: they stay in the vault and the Publish folder gets a copy.
 //
-//   node app/publish.js                       status: every Library document and whether its published copy is current
-//   node app/publish.js <name…>               publish (or re-publish) documents — name = file name, stem, slug or title, case-insensitive
-//   node app/publish.js --outdated            re-publish every published document whose vault version changed
-//   node app/publish.js --remove <name…>      take a copy out of the Publish folder (unpublish)
+//   node app/publish.js                       status: every Library document and where its shared version is
+//   node app/publish.js <name…>               publish — name = file name, stem, slug or title, case-insensitive
+//   node app/publish.js --outdated            re-copy published Markdown notes whose vault version changed
+//   node app/publish.js --remove <name…>      unpublish: a moved document comes back into Library, a copied note is deleted from OneDrive
 //   node app/publish.js --link <name> <url>   save the OneDrive sharing link of a copy (Finder → Share → Copy Link); the hub shows it
 //                                             instead of the folder path. Re-publishing overwrites the same file, so the link stays valid.
 //
@@ -38,8 +40,9 @@ function docs() {
     const src = fs.readFileSync(path.join(LIB, n), 'utf8'); const fm = (src.match(/^---\n([\s\S]*?)\n---/) || ['', ''])[1];
     const get = (k) => (fm.match(new RegExp('^' + k + ':\\s*(.*)$', 'm')) || ['', ''])[1].trim().replace(/^["']|["']$/g, '');
     const file = get('file').replace(/^Library\//, '');
-    if (/^~?\//.test(file)) continue; // lives outside the vault (e.g. already in the shared folder): nothing to copy
-    out.push({ stem, title: get('title') || stem, src: 'Library/' + (file || n) });
+    if (/^~?\//.test(file)) { const abs = file.replace(/^~(?=\/)/, os.homedir()); out.push({ stem, title: get('title') || stem, src: 'Library/' + n, external: abs, note: 'Library/' + n }); continue; } // already moved: the link note
+    const other = names.find(x => x !== n && x.replace(/\.[^.]+$/, '') === stem); // a .md next to a pdf/html of the same name describes that file
+    out.push({ stem, title: get('title') || stem, src: 'Library/' + (file || other || n), note: file || other ? 'Library/' + n : '' });
   }
   for (const n of names.filter(n => !n.endsWith('.md'))) {
     const stem = n.replace(/\.[^.]+$/, ''); if (mdStems.has(stem)) continue;
@@ -59,6 +62,10 @@ function docs() {
   const rec = (() => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')).files || {}; } catch (e) { return {}; } })();
   const bySource = new Map(Object.entries(rec).map(([k, r]) => [r.source, k]));
   for (const d of out) {
+    if (d.external) { // moved: the shared file is the only copy
+      const inPub = PUB && d.external.startsWith(PUB + '/'); d.file = inPub ? d.external.slice(PUB.length + 1).split('/')[0] : path.basename(d.external); d.name = d.file;
+      d.copy = inPub ? path.join(PUB, d.file) : d.external; d.abs = d.copy; d.bundle = inPub && fs.existsSync(d.copy) && fs.statSync(d.copy).isDirectory(); continue;
+    }
     const own = path.basename(d.src); const cands = [bySource.get(d.src), own, undate(own)].filter(Boolean);
     d.name = own; d.file = (PUB && cands.find(n => fs.existsSync(path.join(PUB, n)))) || cands[0]; d.copy = path.join(PUB, d.file); d.abs = path.join(ROOT, d.src);
   }
@@ -68,6 +75,7 @@ const sameFile = (a, b) => { const sa = fs.statSync(a), sb = fs.statSync(b); if 
 const bundleSig = (d) => { let size = 0; const parts = []; for (const n of d.files) { const p = path.join(d.abs, n); const st = fs.statSync(p); size += st.size; parts.push(n + ':' + st.size + ':' + (TEXT.test(n) ? hashText(fs.readFileSync(p, 'utf8')) : '')); } return { size, hash: hashText(parts.join('|')) }; };
 
 function state(d) {
+  if (d.external) return fs.existsSync(d.copy) ? { state: 'moved', date: fs.statSync(d.copy).mtime.toISOString().slice(0, 10) } : { state: 'missing' };
   if (!PUB || !fs.existsSync(PUB)) return { state: 'unavailable' };
   if (!fs.existsSync(d.abs)) return { state: 'missing' };
   if (!fs.existsSync(d.copy)) return { state: 'none' };
@@ -94,11 +102,11 @@ function requirePub() {
 
 function printStatus() {
   const rows = docs().map(d => ({ ...d, ...state(d) }));
-  const label = { current: '✓ current', outdated: '↑ OUTDATED', none: '—', unavailable: '? folder unavailable', missing: '! file missing' };
+  const label = { moved: '✓ in OneDrive', current: '✓ current (copy)', outdated: '↑ OUTDATED', none: '—', unavailable: '? folder unavailable', missing: '! file missing' };
   const w = Math.max(...rows.map(r => r.file.length), 4);
   console.log('Publish folder: ' + (PUB || '(not configured)') + (PUB && !fs.existsSync(PUB) ? '  (NOT FOUND)' : ''));
   for (const r of rows) console.log('  ' + (label[r.state] || r.state).padEnd(22) + (r.date || '').padEnd(12) + r.file.padEnd(w + 2) + r.title);
-  const n = rows.filter(r => r.state === 'current').length, o = rows.filter(r => r.state === 'outdated').length;
+  const n = rows.filter(r => r.state === 'current' || r.state === 'moved').length, o = rows.filter(r => r.state === 'outdated').length;
   console.log(`  ${n} published` + (o ? `, ${o} outdated — run: node app/publish.js --outdated` : ''));
 }
 
@@ -106,7 +114,7 @@ function recordState() { // app/publish-state.json: size, hash and date of every
   if (!PUB || !fs.existsSync(PUB)) return;
   const files = {};
   for (const d of docs()) {
-    if (!fs.existsSync(d.copy)) continue;
+    if (d.external || !fs.existsSync(d.copy)) continue; // a moved document is its own record
     const st = fs.statSync(d.copy);
     if (d.bundle) { const sig = bundleSig({ ...d, abs: d.copy }); files[d.file] = { ...sig, published: st.mtime.toISOString().slice(0, 10), source: d.src, bundle: true }; continue; }
     files[d.file] = { size: st.size, hash: TEXT.test(d.copy) ? hashText(fs.readFileSync(d.copy, 'utf8')) : '', published: st.mtime.toISOString().slice(0, 10), source: d.src };
@@ -143,16 +151,55 @@ else for (const q of names) {
 }
 if (!targets.length) { console.log(remove ? 'nothing to remove' : 'nothing outdated — every published copy is current'); process.exit(0); }
 
+// ---- moving: the vault file goes, a link note with the same name stays ----
+const META = (src, k) => { const m = src.match(new RegExp('<meta\\s+[^>]*name=["\']ycos:' + k + '["\'][^>]*content=["\']([^"\']*)["\']', 'i')); return m ? m[1].trim() : ''; };
+const yaml = (v) => /^[\w .,()&+-]*$/.test(v) && !/^\d/.test(v) ? v : JSON.stringify(v);
+function linkNote(d) { // the note that stays in Library: the file's own frontmatter/meta, plus file: → OneDrive
+  const tilde = (p) => p.startsWith(os.homedir() + '/') ? '~' + p.slice(os.homedir().length) : p;
+  const main = d.bundle ? path.join(d.copy, d.files.includes(d.name + '.html') ? d.name + '.html' : d.files.includes(undate(d.name) + '.html') ? undate(d.name) + '.html' : d.files.includes('index.html') ? 'index.html' : d.files.find(f => /\.html?$/i.test(f))) : d.copy;
+  const notePath = path.join(LIB, d.stem + '.md');
+  if (fs.existsSync(notePath)) { // a note already describes it: point its file: at OneDrive
+    let src = fs.readFileSync(notePath, 'utf8'); const fm = src.match(/^---\n([\s\S]*?)\n---/);
+    const line = 'file: ' + tilde(main);
+    if (fm) { const lines = fm[1].split('\n').filter(l => !/^file:/.test(l)); lines.push(line); src = '---\n' + lines.join('\n') + '\n---' + src.slice(fm[0].length); } else src = '---\n' + line + '\n---\n' + src;
+    fs.writeFileSync(notePath, src); return;
+  }
+  const html = /\.html?$/i.test(main) ? fs.readFileSync(main, 'utf8') : '';
+  const title = META(html, 'title') || ((html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '').trim() || undate(d.stem);
+  const fm = [['title', title], ['category', META(html, 'category') || (/\.html?$/i.test(main) ? 'tool' : 'document')], ['project', META(html, 'project') ? '[[' + META(html, 'project') + ']]' : ''],
+    ['status', META(html, 'status') || 'live'], ['added', META(html, 'added') || (d.stem.match(/^\d{4}-\d{2}-\d{2}/) || [''])[0]], ['tags', META(html, 'tags')], ['file', tilde(main)]].filter(([, v]) => v);
+  const desc = META(html, 'description');
+  fs.writeFileSync(notePath, '---\n' + fm.map(([k, v]) => k + ': ' + (k === 'file' || k === 'added' ? v : yaml(v))).join('\n') + '\n---\n' + (desc ? desc + '\n\n' : '') + `Published: lives in the OneDrive Publish folder as \`${d.file}\`. Edit it there; this note only points at it.\n`);
+}
+const same = (d) => d.bundle ? d.files.every(n => fs.existsSync(path.join(d.copy, n)) && sameFile(path.join(d.abs, n), path.join(d.copy, n))) : fs.existsSync(d.copy) && sameFile(d.abs, d.copy);
+const isNote = (d) => !d.bundle && /\.md$/i.test(d.src);
+
 for (const d of targets) {
-  if (remove) { if (fs.existsSync(d.copy)) { fs.rmSync(d.copy, { recursive: true, force: true }); console.log('removed   ' + d.file); } else console.log('not published  ' + d.file); continue; }
+  if (remove) {
+    if (d.external) { // unpublish a moved document: bring it back into Library, the link note becomes its description
+      if (!fs.existsSync(d.copy)) { console.log('missing in OneDrive  ' + d.file); continue; }
+      const back = path.join(LIB, d.bundle ? d.stem : d.stem + path.extname(d.copy));
+      if (fs.existsSync(back)) fail('already in Library: ' + path.relative(ROOT, back));
+      fs.cpSync(d.copy, back, { recursive: true }); fs.rmSync(d.copy, { recursive: true, force: true });
+      const np = path.join(ROOT, d.note); fs.writeFileSync(np, fs.readFileSync(np, 'utf8').replace(/^file:.*\n/m, '').replace(/^Published: lives in the OneDrive Publish folder.*\n?/m, ''));
+      console.log('back in Library  ' + path.relative(ROOT, back)); continue;
+    }
+    if (fs.existsSync(d.copy)) { fs.rmSync(d.copy, { recursive: true, force: true }); console.log('removed   ' + d.file); } else console.log('not published  ' + d.file); continue;
+  }
+  if (d.external) { console.log('already in OneDrive  ' + d.file); continue; }
   if (!fs.existsSync(d.abs)) fail('vault file missing: ' + d.src);
   const was = state(d).state;
-  if (d.bundle) { // copy each file in place and remove stale ones; the folder itself is kept so its share link survives
-    fs.mkdirSync(d.copy, { recursive: true });
-    for (const n of d.files) fs.copyFileSync(path.join(d.abs, n), path.join(d.copy, n));
-    for (const n of fs.readdirSync(d.copy)) if (!n.startsWith('.') && !d.files.includes(n) && fs.statSync(path.join(d.copy, n)).isFile()) fs.unlinkSync(path.join(d.copy, n));
-  } else fs.copyFileSync(d.abs, d.copy); // plain copy, new mtime → the app notices the Publish folder changed and rebuilds the hub
-  console.log((was === 'none' ? 'published ' : 'updated   ') + d.file + (d.bundle ? '/ (' + d.files.length + ' files)' : '') + '  →  ' + d.copy);
+  if (!same(d)) { // copy (a share link to an existing copy or folder stays valid: files are overwritten in place)
+    if (d.bundle) {
+      fs.mkdirSync(d.copy, { recursive: true });
+      for (const n of d.files) fs.copyFileSync(path.join(d.abs, n), path.join(d.copy, n));
+      for (const n of fs.readdirSync(d.copy)) if (!n.startsWith('.') && !d.files.includes(n) && fs.statSync(path.join(d.copy, n)).isFile()) fs.unlinkSync(path.join(d.copy, n));
+    } else fs.copyFileSync(d.abs, d.copy);
+  }
+  if (isNote(d)) { console.log((was === 'none' ? 'published ' : 'updated   ') + d.file + ' (copy; the note stays in the vault)'); continue; }
+  if (!same(d)) fail('the copy in OneDrive does not match ' + d.src + ' — nothing removed from the vault');
+  linkNote(d); fs.rmSync(d.abs, { recursive: true, force: true }); // verified identical → the vault keeps only the link note
+  console.log('moved     ' + d.src + '  →  ' + d.copy + '  (Library keeps ' + d.stem + '.md)');
 }
 recordState();
 rebuild();

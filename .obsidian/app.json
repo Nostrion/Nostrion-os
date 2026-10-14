@@ -2,6 +2,6 @@
   "useMarkdownLinks": false,
   "newFileLocation": "folder",
   "newFileFolderPath": "Library",
-  "attachmentFolderPath": "Assets",
+  "attachmentFolderPath": "Assets/Attachment",
   "showFrontmatter": true
 }

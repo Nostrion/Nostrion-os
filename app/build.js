@@ -120,7 +120,7 @@ function trashNote(io, ROOT, req) {
 }
 
 // ---------- note editing in the app: read the whole file, write it back when nobody else changed it meanwhile ----------
-const EDIT_FILE = /^(?:(?:Log|People|Projects|Library|Assets)\/[^/]+|README)\.md$/; // markdown notes only, no paths outside the vault
+const EDIT_FILE = /^(?:(?:Log|People|Projects|Library)\/[^/]+|Assets(?:\/(?!\.)[^/]+)+|README)\.md$/; // markdown notes only (Assets/ with subfolders); no segment starts with a dot, so no paths outside the vault
 function readNote(io, ROOT, req) { // req: {file} → {ok, file, text}
   const file = String(req && req.file || ''); if (!EDIT_FILE.test(file)) return { ok: false, file, error: 'only markdown notes in Log/, People/, Projects/, Library/ and Assets/ can be edited in the app' };
   const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, file, error: file + ' no longer exists' };
@@ -167,6 +167,9 @@ const SHARE_BASE = String(CONFIG.shareBase || '').replace(/\/+$/, ''); // web ad
 const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 // Library/ and Assets/ names start with the day the file was made: 2026-10-08_website-relaunch-brief.html (see app/datename.js).
 // undate() splits that off: base is the name without the date, used for titles, project matching and as a link alias.
+// Documents (pdf, Word, PowerPoint, Excel, Keynote, Pages, Numbers…) belong in Library/; Assets/ holds brand files (Assets/Brand Asset/)
+// and attachments, images used in notes (Assets/Attachment/, where Obsidian puts pasted images).
+const DOC_EXT = /\.(pdf|docx?|pptx?|xlsx?|key|pages|numbers|odt|ods|odp|rtf)$/i;
 const undate = (s) => { const m = String(s).match(/^(\d{4}-\d{2}-\d{2})_(.+)$/); return m ? { date: m[1], base: m[2] } : { date: '', base: String(s) }; };
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const isoDate = (d) => d.toISOString().slice(0, 10);
@@ -349,6 +352,7 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
 {
   const dir = join(ROOT, 'Library'); const mdStems = new Set();
   const files = listDir(dir).filter(e => e.isFile());
+  const fileOf = new Map(files.filter(f => !f.name.endsWith('.md')).map(f => [f.name.replace(/\.[^.]+$/, ''), f.name])); // a .md next to a pdf/html of the same name describes that file
   for (const e of files.filter(f => f.name.endsWith('.md'))) {
     const p = join(dir, e.name); const { data, body } = parseFrontmatter(readMd(p)); const stem = e.name.replace(/\.md$/, '');
     mdStems.add(stem);
@@ -356,13 +360,13 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
     const ext = /^~?\//.test(String(data.file || '')); // file: an absolute path → the document lives outside the vault (e.g. a shared OneDrive folder)
     docs.push({ type: 'doc', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p), external: ext,
       category: data.category || 'note', status: data.status || 'draft', added: data.added ? String(data.added) : u.date || fileDate(p),
-      projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), open: data.file ? (ext ? String(data.file).replace(/^~(?=\/)/, io.home()) : 'Library/' + String(data.file).replace(/^Library\//, '')) : '', fm: data, body });
+      projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), open: data.file ? (ext ? String(data.file).replace(/^~(?=\/)/, io.home()) : 'Library/' + String(data.file).replace(/^Library\//, '')) : fileOf.has(stem) ? 'Library/' + fileOf.get(stem) : '', fm: data, body });
   }
   for (const e of files.filter(f => !f.name.endsWith('.md'))) {
     const stem = e.name.replace(/\.[^.]+$/, ''); if (mdStems.has(stem)) continue; // has sidecar → already listed
     const p = join(dir, e.name); const u = undate(stem); let title = u.base; let meta = {};
     if (/\.html?$/i.test(e.name)) { const src = io.read(p); const m = src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim(); meta = htmlMeta(src); }
-    docs.push({ type: 'doc', id: slug(stem), name: meta.title || title, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p), category: meta.category || (/\.html?$/i.test(e.name) ? 'tool' : 'reference'), status: meta.status || 'live', added: meta.added || u.date || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '' });
+    docs.push({ type: 'doc', id: slug(stem), name: meta.title || title, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p), category: meta.category || (/\.html?$/i.test(e.name) ? 'tool' : DOC_EXT.test(e.name) ? 'document' : 'reference'), status: meta.status || 'live', added: meta.added || u.date || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '' });
   }
   // a folder in Library is one document (a bundle): <name>/<name>.html, or index.html, plus the files it needs (data, assets).
   // It is published as a folder, so one share link covers everything in it.
@@ -376,24 +380,28 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
     docs.push({ type: 'doc', id: slug(e.name), name: meta.title || title, stem: e.name, base: ub.base, dated: ub.date, file: rel(p), edited, category: meta.category || 'tool', status: meta.status || 'live', added: meta.added || ub.date || fileDate(p), projectName: meta.project || '', tags: namesFrom(meta.tags), open: rel(p), fm: meta, body: '', description: meta.description || '', bundle: e.name, bundleFiles: inside });
   }
 }
-{
-  const dir = join(ROOT, 'Assets'); const files = listDir(dir).filter(e => e.isFile() && !/\.html?$/i.test(e.name));
+// Assets/ may have subfolders (any depth): each file keeps its folder (asset.folder, '' at the top), the hub groups and filters by it.
+const assetDirs = (function walk(rel, out) { out.push(rel); for (const e of listDir(join(ROOT, rel))) if (!e.isFile()) walk(rel + '/' + e.name, out); return out; })('Assets', []);
+for (const relDir of assetDirs) {
+  const dir = join(ROOT, relDir); const folder = relDir.slice('Assets'.length + 1); const files = listDir(dir).filter(e => e.isFile() && !/\.html?$/i.test(e.name));
   // HTML documents belong in Library/ (they are documents, not files) — an .html in Assets/ is skipped and reported
-  for (const e of listDir(dir)) if (e.isFile() && /\.html?$/i.test(e.name)) warnings.push('Assets/' + e.name + ' is an HTML document — move it to Library/');
+  for (const e of listDir(dir)) if (e.isFile() && /\.html?$/i.test(e.name)) warnings.push(relDir + '/' + e.name + ' is an HTML document — move it to Library/');
+  for (const e of files) if (DOC_EXT.test(e.name)) warnings.push(relDir + '/' + e.name + ' is a document — move it to Library/ (Assets/ is for brand files and attachments)');
   const sidecars = new Map(files.filter(f => f.name.endsWith('.md')).map(f => [f.name.replace(/\.md$/, ''), f.name]));
+  const idOf = (stem) => { const id = slug(stem); return assets.some(a => a.id === id) ? slug(folder + '-' + stem) : id; }; // same name in two folders → the folder makes the id unique
   for (const e of files.filter(f => !f.name.endsWith('.md'))) {
     const p = join(dir, e.name); const stem = e.name.replace(/\.[^.]+$/, ''); const st = io.stat(p);
     let data = {}, body = '';
     if (sidecars.has(stem)) ({ data, body } = parseFrontmatter(readMd(join(dir, sidecars.get(stem)))));
     const u = undate(stem);
-    assets.push({ type: 'asset', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || isoDate(st.mtime), file: rel(p), edited: isoDate(st.mtime), size: st.size,
-      ext: (e.name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase(), projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: sidecars.has(stem) ? 'Assets/' + sidecars.get(stem) : '' });
+    assets.push({ type: 'asset', id: idOf(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || isoDate(st.mtime), file: rel(p), folder, edited: isoDate(st.mtime), size: st.size,
+      ext: (e.name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase(), projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: sidecars.has(stem) ? relDir + '/' + sidecars.get(stem) : '' });
   }
   for (const [stem, mdName] of sidecars) { // sidecar without file → still list as note
-    if (assets.some(a => a.stem === stem)) continue;
+    if (assets.some(a => a.stem === stem && a.folder === folder)) continue;
     const p = join(dir, mdName); const { data, body } = parseFrontmatter(readMd(p));
     const u = undate(stem);
-    assets.push({ type: 'asset', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || fileDate(p), file: rel(p), edited: fileDate(p), size: io.stat(p).size, ext: 'md', projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: rel(p) });
+    assets.push({ type: 'asset', id: idOf(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, added: data.added ? String(data.added) : u.date || fileDate(p), file: rel(p), folder, edited: fileDate(p), size: io.stat(p).size, ext: 'md', projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), fm: data, body, sidecar: rel(p) });
   }
 }
 { const n = docs.filter(x => !x.dated).length + assets.filter(x => !x.dated).length; if (n) warnings.push(n + ' file' + (n === 1 ? '' : 's') + ' in Library/ or Assets/ without a date in the name — run: node app/datename.js'); }

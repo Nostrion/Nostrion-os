@@ -240,7 +240,8 @@ function ycosNavBarScript(root) {
 // newest modification time of any .md / .html file in the vault (skips app/, .obsidian/)
 function ycosNewest(root) {
   var fm = $.NSFileManager.defaultManager; var newest = 0;
-  var dirs = ['Log', 'People', 'Projects', 'Library', 'Assets', ''];
+  var dirs = ['Log', 'People', 'Projects', 'Library', ''];
+  (function walk(rel) { dirs.push(rel); var ns = ObjC.deepUnwrap(fm.contentsOfDirectoryAtPathError(root + '/' + rel, null)) || []; for (var n = 0; n < ns.length; n++) { if (ns[n].charAt(0) === '.') continue; var d = Ref(); if (fm.fileExistsAtPathIsDirectory(root + '/' + rel + '/' + ns[n], d) && d[0]) walk(rel + '/' + ns[n]); } })('Assets'); // Assets/ with its subfolders
   for (var i = 0; i < dirs.length; i++) {
     var dir = dirs[i] ? root + '/' + dirs[i] : root;
     var names = ObjC.deepUnwrap(fm.contentsOfDirectoryAtPathError(dir, null)) || [];

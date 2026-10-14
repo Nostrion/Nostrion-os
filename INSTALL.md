@@ -50,7 +50,7 @@ When the person is ready to start with their own notes, remove the example files
 cd ~/Nostrion-os && rm Log/2026-10-05.md Log/2026-10-06.md Log/2026-10-07.md Log/2026-10-12.md "People/Lena Bakker.md" "People/Mo Jansen.md" "People/Sam Visser.md" "Projects/Acme pilot.md" "Projects/Website relaunch.md" "Projects/Onboarding guide.md" Library/2026-10-06_homepage-directions.md && node app/build.js
 ```
 
-The Nostrion logo files in `Assets/` can stay. Then log the first entry: tell Claude what you did today and say `/worklog`.
+The Nostrion logo files in `Assets/Brand Asset/` can stay; `Assets/Attachment/` is where Obsidian puts images you paste into a note. Then log the first entry: tell Claude what you did today and say `/worklog`.
 
 ## 7. Optional: publishing documents
 

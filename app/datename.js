@@ -1,4 +1,4 @@
-// Date-prefix naming for Library/ and Assets/: every document and file is named  YYYY-MM-DD_<name>  (the day it was made),
+// Date-prefix naming for Library/ and Assets/ (with its subfolders): every document and file is named  YYYY-MM-DD_<name>  (the day it was made),
 // so Finder, OneDrive and search list them in order and a name like 2026-10-08_website-relaunch-brief is easy to cite.
 //
 //   node app/datename.js           dry run: what would be renamed, and which notes link to it
@@ -24,12 +24,14 @@ const visible = (dir) => fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => !n
 
 // ---- plan: one group per stem (a file and its .md sidecar move together) ----
 const plan = []; // {dir, stem, date, names[]}
-for (const dir of ['Library', 'Assets']) {
+// Library/: the top level (a folder there is one document). Assets/: every subfolder too; the folders keep their names.
+const assetDirs = (function walk(rel, out) { out.push(rel); for (const n of visible(path.join(ROOT, rel))) if (fs.statSync(path.join(ROOT, rel, n)).isDirectory()) walk(rel + '/' + n, out); return out; })('Assets', []);
+for (const dir of ['Library', ...assetDirs]) {
   const abs = path.join(ROOT, dir); const groups = new Map();
   for (const n of visible(abs)) {
     if (DATED.test(n)) continue;
     const isDir = fs.statSync(path.join(abs, n)).isDirectory();
-    if (isDir && dir === 'Assets') continue;
+    if (isDir && dir.startsWith('Assets')) continue;
     const stem = isDir ? n : stemOf(n);
     if (!groups.has(stem)) groups.set(stem, []);
     groups.get(stem).push(n);
@@ -71,7 +73,7 @@ for (const p of notes) {
 }
 
 // ---- report ----
-if (!renames.length) { console.log('Every file in Library/ and Assets/ already starts with a date.'); process.exit(0); }
+if (!renames.length) { console.log('Every file in Library/ and Assets/ (and its subfolders) already starts with a date.'); process.exit(0); }
 const w = Math.max(...renames.map(r => (r.dir + '/' + r.from).length));
 for (const r of renames) console.log('  ' + (r.dir + '/' + r.from).padEnd(w + 2) + '→  ' + r.to);
 for (const e of edits) console.log('  links  ' + path.relative(ROOT, e.p) + '  (' + e.n + ')');

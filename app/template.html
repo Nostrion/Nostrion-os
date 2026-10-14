@@ -316,6 +316,17 @@
   .card.media .cap b{font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .card.media .cap span{color:var(--ink-dim);font-size:12px}
 
+  .cgrp{font-size:18px;color:var(--ink);padding:0 0 8px;margin:0 0 var(--s4);border-bottom:1px solid var(--line)}
+  .cgrp small{font-size:13px;color:var(--ink-soft);margin-left:var(--s3)}
+  td.name .athumb{float:left;width:44px;height:34px;margin:0 12px 0 0;padding:3px;background:var(--well);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  td.name .athumb img{max-width:100%;max-height:100%;object-fit:contain}
+  td.name .athumb i{font:11px var(--mono);font-style:normal;color:var(--ink-soft)}
+  td.name .aname{display:block;overflow:hidden}
+
+  .rowact{margin-left:10px;font-size:12px;color:var(--ink-soft);border-bottom:1px solid var(--line-hi);cursor:pointer;opacity:0;transition:opacity var(--t-fast);white-space:nowrap}
+  tr.row:hover .rowact{opacity:1} .rowact:hover{color:var(--ink);border-bottom-color:var(--ink)}
+  @media (hover:none){.rowact{opacity:1}}
+
   /* small bits */
   .own{display:inline-flex;align-items:center;gap:5px;white-space:nowrap} .own svg{width:15px;height:15px} .own b{display:inline-block;min-width:17px;padding:0 5px;font-size:11px;line-height:17px;text-align:center;font-weight:400;background:var(--well);border-radius:999px}
   .mini{display:inline-block;margin-left:6px;padding:0 9px;font-size:12px;line-height:20px;color:var(--ink-soft);border:1px solid var(--line);border-radius:999px;cursor:pointer;white-space:nowrap;transition:background var(--t-fast),color var(--t-fast),border-color var(--t-fast)} .mini:first-child{margin-left:0}
@@ -437,7 +448,7 @@ const TONE = { active:'violet', live:'violet', current:'violet', doing:'iris', p
 const pill = (text, tone) => `<span class="pill pill--${tone || 'line'}">${esc(text)}</span>`;
 const statusPill = (s) => s ? pill(s, TONE[s] || 'well') : '';
 const SWATCH = { violet:'var(--violet)', iris:'var(--iris)', lilac:'var(--lilac)', lemon:'var(--lemon)', amber:'var(--amber)', ink:'var(--ink)', well:'var(--block)' };
-const CAT_TONE = { meeting:'violet', build:'iris', research:'lilac', writing:'lemon', admin:'well', learning:'amber', brief:'violet', report:'iris', framework:'lemon', tool:'ink', reference:'well', post:'amber', presentation:'violet', prototype:'iris', note:'' };
+const CAT_TONE = { meeting:'violet', build:'iris', research:'lilac', writing:'lemon', admin:'well', learning:'amber', brief:'violet', report:'iris', framework:'lemon', tool:'ink', reference:'well', document:'lilac', post:'amber', presentation:'violet', prototype:'iris', note:'' };
 const catTone = (c) => { if (c in CAT_TONE) return CAT_TONE[c]; let x = 0; for (const ch of String(c)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return ['violet','iris','lilac','lemon','amber'][x % 5]; };
 const swatch = (c) => { const t = catTone(c); return `<span class="dot" style="${t ? `--dot:${SWATCH[t]}` : '--dot:transparent;--dotb:var(--ink-dim)'}"></span>`; };
 const catHtml = (c) => c ? `<span class="cat">${swatch(c)}${esc(c)}</span>` : '';
@@ -510,6 +521,7 @@ function peopleShort(ids, max=3) {
   const shown = ids.slice(0,max).map(id => link('person', id)).join('<span class="sep">·</span>');
   return shown + (ids.length>max ? `<span class="none-v"> +${ids.length-max}</span>` : '');
 }
+const finderAct = (path) => NATIVE && path ? `<span class="rowact" title="Show in Finder" onclick="ycReveal(event, ${jsArg(absPath(path))})">Show in Finder</span>` : '';
 const emptyHtml = (what, how) => `<div class="empty">No ${what} yet. ${how}</div>`;
 // facts panel: label → value rows, then optional groups, then Settings (status, delete) folded at the end
 const kv = (rows) => { const r = rows.filter(x => x && x[1] !== '' && x[1] != null); return r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>` : ''; };
@@ -519,14 +531,14 @@ const tagsHtml = (tags) => tags && tags.length ? tags.map(t => `<span class="tag
 const STATUS_OPTS = { project: ['idea', 'active', 'paused', 'done', 'archived'], doc: ['draft', 'live', 'archived'], person: ['active', 'archived'] };
 const LIST_OF = { project: '#/projects', doc: '#/library', person: '#/people' };
 const editHref = (file) => `#/edit/${encodeURIComponent(file)}`;
-function noteActs(file, extra = []) { // extra: [{label, href | on, primary?}] — a primary extra replaces Edit as the main button
+function noteActs(file, extra = [], reveal) { // reveal: the file Show in Finder selects (default: the note itself) // extra: [{label, href | on, primary?}] — a primary extra replaces Edit as the main button
   const isMd = file && /\.md$/.test(file); const items = [];
   let primary = extra.find(x => x.primary);
   if (!primary && isMd) primary = S.editIn === 'obsidian' || !NATIVE ? { label: NATIVE ? 'Edit in Obsidian' : 'Open in Obsidian', href: obs(file), edit: true } : { label: 'Edit', href: editHref(file), edit: true };
   if (isMd && NATIVE && S.editIn === 'obsidian') items.push({ label: 'Edit here', href: editHref(file) });
   if (isMd && (S.editIn !== 'obsidian' && NATIVE)) items.push({ label: 'Open in Obsidian', href: obs(file) });
   for (const x of extra) if (x !== primary) items.push(x);
-  if (file && NATIVE) items.push({ label: 'Show in Finder', on: `ycReveal(event, ${jsArg(absPath(file))})` });
+  if ((reveal || file) && NATIVE) items.push({ label: 'Show in Finder', on: `ycReveal(event, ${jsArg(absPath(reveal || file))})` });
   if (file) items.push({ label: 'Copy file path', on: `ycCopy(event, ${jsArg(absPath(file))}, 'Path copied')` });
   const a = (x, cls) => x.href ? `<a class="${cls}" href="${esc(x.href)}"${/^(https?|obsidian|file):/.test(x.href) ? ' data-ext="1"' : ''}${x.edit ? ' data-edit' : ''}>${esc(x.label)}</a>` : `<button type="button" class="${cls}" onclick="${x.on}">${esc(x.label)}</button>`;
   return `${primary ? a(primary, 'btn primary') : ''}${items.length ? `<div class="dd"><button class="btn" type="button" data-dd title="More">•••</button><div class="menu right" hidden>${items.map(x => a(x, '')).join('')}</div></div>` : ''}`;
@@ -1020,7 +1032,7 @@ P.library = () => {
   ];
   const F = makeFilter(st, groups, D.docs);
   const cols = [
-    { k: 'name', l: 'Title', cls: 'name', v: d => d.name, r: d => `${esc(d.name)}${d.open ? '<span class="ext"></span>' : ''}<small>${catHtml(d.category)}</small>` },
+    { k: 'name', l: 'Title', cls: 'name', v: d => d.name, r: d => `${esc(d.name)}${d.open ? '<span class="ext"></span>' : ''}${finderAct(d.bundle ? 'Library/' + d.bundle : d.open || d.file)}<small>${catHtml(d.category)}</small>` },
     { k: 'project', l: 'Project', w: '16%', v: d => d.project ? projName(d.project) : null, r: d => d.project ? link('project', d.project) : '' },
     { k: 'status', l: 'Status', w: '90px', v: d => ['live', 'draft', 'archived'].indexOf(d.status), r: d => statusPill(d.status) },
     { k: 'pub', l: 'Shared', w: '210px', cls: 'nowrap', v: d => (d.pub || {}).date || null, dd: 'desc', r: d => pubHtml(d) + copyBtn(d) },
@@ -1039,36 +1051,67 @@ P.doc = (id) => {
   const extra = []; if (d.open) extra.push({ label: 'Open', href: fileHref(d.open), primary: !isMd });
   if (d.pub && d.pub.link) extra.push({ label: 'Copy share link', on: `ycCopy(event, ${jsArg(d.pub.link)}, 'Link copied')` });
   if (pubd && NATIVE) extra.push({ label: 'Show shared copy in Finder', on: `ycReveal(event, ${jsArg(D.publish.dir+'/'+d.pubFile)})` });
-  return { title: d.name, crumbs: [['Library', '#/library']], sub: [catHtml(d.category), d.project ? link('project', d.project) : ''].filter(Boolean).join('<span class="sep">·</span>'), acts: noteActs(d.file, extra),
+  return { title: d.name, crumbs: [['Library', '#/library']], sub: [catHtml(d.category), d.project ? link('project', d.project) : ''].filter(Boolean).join('<span class="sep">·</span>'), acts: noteActs(d.file, extra, d.bundle ? 'Library/' + d.bundle : d.open || d.file),
     html: `${d.bodyHtml?`<div class="body">${d.bodyHtml}</div>`:(d.open?`<div class="empty">An HTML document. <a class="wl ext" href="${fileHref(d.open)}" target="_blank">Open it</a>, or add <code>Library/${esc(d.stem)}.md</code> to describe it.</div>`:'')}
     <div style="margin-top:40px">${timeline(backlinksOf('doc',id).filter(b=>b.type==='day').map(b=>b.entry),'Mentioned in log', { open: false })}${backlinksHtml('doc',id)}</div>`,
     aside: kv([['Status', statusPill(d.status)], ['Category', catHtml(d.category)], ['Project', d.project ? link('project', d.project) : ''], ['Added', d.added], ['Edited', d.edited],
       ['Shared', (pubHtml(d) || '<span class="none-v">Not published</span>') + copyBtn(d) + (pubd ? `<div class="none-v" style="font-size:12px;margin-top:2px">Publish/${esc(d.pubFile)}</div>` : `<div class="none-v" style="font-size:12px;margin-top:2px">/publish ${esc(d.stem)}</div>`)],
       ['File', d.open ? `<a class="wl ext" href="${fileHref(d.open)}" target="_blank">${esc(d.open.split('/').pop())}</a>` : `<span class="none-v">${esc(d.file)}</span>`], ['Tags', tagsHtml(d.tags)]]) + (isMd ? settingsFold('doc', d) : '') };
 };
+// Assets: cards (thumbnails) or a table; grouped by folder (Assets/ may have subfolders), project or month.
+const isImg = (a) => ['png','jpg','jpeg','gif','webp','svg'].includes(a.ext);
+const sizeTxt = (n) => n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB';
+const folderName = (f) => f ? f.split('/').join(' / ') : 'Assets';
 P.assets = () => {
-  const st = fstate('assets', { sort: { k: 'added', d: 'desc' }, order: 'added' });
+  const st = fstate('assets', { sort: { k: 'added', d: 'desc' }, view: 'cards', groupBy: 'folder' });
+  const hasFolders = D.assets.some(a => a.folder);
+  if (!hasFolders && st.groupBy === 'folder') st.groupBy = 'none';
   const groups = [
+    ...(hasFolders ? [{ k: 'folder', label: 'Folder', get: a => a.folder, labelOf: folderName, none: 'Assets' }] : []),
     { k: 'ext', label: 'Type', get: a => a.ext, none: 'No extension' },
     { k: 'proj', label: 'Project', get: a => a.project, labelOf: projName, none: 'No project' },
   ];
   const F = makeFilter(st, groups, D.assets);
-  const k = st.order;
-  const rows = D.assets.filter(F.pass).sort((a, b) => k === 'name' ? a.name.localeCompare(b.name) : k === 'size' ? b.size - a.size : k === 'edited' ? b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name) : (b.added || '').localeCompare(a.added || '') || a.name.localeCompare(b.name));
-  const isImg = (a) => ['png','jpg','jpeg','gif','webp','svg'].includes(a.ext);
-  return { title:'Assets', sub: `${rows.length} of ${D.assets.length} · files that are not documents`,
-    html: `${controls(F.html, '<span class="spacer"></span><span class="ctl-l">Sort</span>', segOf(st, 'order', [['added','Date'],['edited','Edited'],['name','Name'],['size','Size']]))}
-    ${rows.length?`<div class="cards">${rows.map(a=>`<div class="card media" onclick="location.hash='#/asset/${a.id}'"><div class="th">${isImg(a)?`<img src="${fileHref(a.file)}" alt="" loading="lazy">`:esc(a.ext)}</div><div class="cap"><b>${esc(a.name)}</b><span>${esc(a.added)} · ${esc(a.ext)}${a.project?' · '+esc(projName(a.project)):''}</span></div></div>`).join('')}</div>`:D.assets.length?'<div class="empty">Nothing matches these filters.</div>':emptyHtml('assets','Drop any file in <code>Assets/</code>. Add <code>name.md</code> next to it for notes and links.')}`,
-    after: () => bindList(st) };
+  const cols = [
+    { k: 'name', l: 'File', cls: 'name', v: a => a.name, r: a => `<span class="athumb">${isImg(a) ? `<img src="${fileHref(a.file)}" alt="" loading="lazy">` : `<i>${esc(a.ext)}</i>`}</span><span class="aname">${esc(a.name)}${finderAct(a.file)}${a.text ? `<small class="clip2">${esc(a.text.slice(0, 160))}</small>` : ''}</span>` },
+    ...(hasFolders && st.groupBy !== 'folder' ? [{ k: 'folder', l: 'Folder', w: '14%', cls: 'dim', v: a => a.folder || null, r: a => esc(folderName(a.folder)) }] : []),
+    { k: 'ext', l: 'Type', w: '70px', cls: 'dim', v: a => a.ext, r: a => esc(a.ext) },
+    ...(st.groupBy === 'project' ? [] : [{ k: 'project', l: 'Project', w: '16%', v: a => a.project ? projName(a.project) : null, r: a => a.project ? link('project', a.project) : '' }]),
+    { k: 'size', l: 'Size', w: '80px', num: true, cls: 'dim', v: a => a.size, r: a => sizeTxt(a.size) },
+    { k: 'added', l: 'Date', w: '100px', num: true, cls: 'dim', dd: 'desc', v: a => a.added || null, r: a => a.added },
+    { k: 'edited', l: 'Edited', w: '100px', num: true, cls: 'dim', dd: 'desc', v: a => a.edited, r: a => a.edited },
+  ];
+  let rows = sortRows(D.assets.filter(F.pass), cols, st.sort, (a, b) => a.name.localeCompare(b.name));
+  const keyOf = { folder: a => a.folder, project: a => a.project || '', month: a => (a.added || a.edited).slice(0, 7) }[st.groupBy];
+  const counts = {}; if (keyOf) for (const a of rows) counts[keyOf(a)] = (counts[keyOf(a)] || 0) + 1;
+  const label = (k) => grpLabel(st.groupBy === 'folder' ? folderName(k) : st.groupBy === 'project' ? (k ? projName(k) : 'No project') : month(k + '-01'), plural(counts[k] || 0, 'file'));
+  if (keyOf) { // groups in a fixed order (folders A–Z with the top level first, projects A–Z, months newest first); the chosen sort applies inside each group
+    const order = [...new Set(rows.map(keyOf))].sort((a, b) => st.groupBy === 'month' ? b.localeCompare(a) : (a === '') - (b === '') || (st.groupBy === 'folder' ? (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)) : projName(a).localeCompare(projName(b))));
+    if (st.groupBy === 'folder') order.sort((a, b) => a === '' ? -1 : b === '' ? 1 : a.localeCompare(b));
+    rows = rows.map((a, i) => [a, i]).sort(([a, i], [b, j]) => order.indexOf(keyOf(a)) - order.indexOf(keyOf(b)) || i - j).map(([a]) => a);
+  }
+  const card = (a) => `<div class="card media" onclick="location.hash='#/asset/${a.id}'"><div class="th">${isImg(a)?`<img src="${fileHref(a.file)}" alt="" loading="lazy">`:esc(a.ext)}</div><div class="cap"><b>${esc(a.name)}</b><span>${esc(a.added)} · ${esc(a.ext)} · ${sizeTxt(a.size)}${a.project?' · '+esc(projName(a.project)):''}</span></div></div>`;
+  const cardsHtml = () => { if (!keyOf) return `<div class="cards">${rows.map(card).join('')}</div>`; let out = '', cur = null, buf = [];
+    const flush = () => { if (buf.length) out += `<div class="cgrp">${label(cur)}</div><div class="cards">${buf.map(card).join('')}</div>`; buf = []; };
+    for (const a of rows) { if (keyOf(a) !== cur) { flush(); cur = keyOf(a); } buf.push(a); } flush(); return out; };
+  const groupOpts = [...(hasFolders ? [['folder', 'Folder']] : []), ['project', 'Project'], ['month', 'Month'], ['none', 'None']];
+  const sortSeg = st.view === 'cards' ? `<span class="ctl-l">Sort</span>${segOf({ s: st.sort.k }, 's', [['added','Date'],['edited','Edited'],['name','Name'],['size','Size']]).replace('class="seg modes', 'class="seg sortseg')}` : '';
+  return { title:'Assets', sub: `${rows.length} of ${D.assets.length} · files that are not documents${hasFolders ? ` · ${plural(new Set(D.assets.map(a => a.folder)).size, 'folder')}` : ''}`,
+    html: `${controls(segOf(st, 'view', [['cards','Cards'],['table','Table']]), F.html, '<span class="spacer"></span>', sortSeg, '<span class="ctl-l">Group</span>', segOf(st, 'groupBy', groupOpts))}
+    ${!D.assets.length ? emptyHtml('assets','Brand files go in <code>Assets/Brand Asset/</code>, images used in notes in <code>Assets/Attachment/</code> (Obsidian puts pasted images there). Documents such as PDFs belong in Library. Add <code>name.md</code> next to a file for notes and links.')
+      : !rows.length ? '<div class="empty">Nothing matches these filters.</div>'
+      : st.view === 'table' ? tableHtml(cols, rows, st.sort, { href: a => `#/asset/${a.id}`, group: keyOf ? { keys: cols.map(c => c.k), of: keyOf, label } : null })
+      : cardsHtml()}`,
+    after: () => bindList(st, () => $('#content').querySelector('.sortseg')?.addEventListener('click', ev => { const b = ev.target.closest('[data-v]'); if (!b) return; const k = b.dataset.v; st.sort = { k, d: k === 'name' ? 'asc' : 'desc' }; saveFS(); route(); })) };
 };
 P.asset = (id) => {
   const a = by.asset.get(id); if (!a) return notFound('asset', id);
-  const isImg = ['png','jpg','jpeg','gif','webp','svg'].includes(a.ext);
-  return { title: a.name, crumbs: [['Assets', '#/assets']], sub: esc(`${a.ext} · ${a.size>1e6?(a.size/1e6).toFixed(1)+' MB':Math.round(a.size/1e3)+' KB'}`),
-    acts: noteActs(a.sidecar, [{ label: 'Open file', href: fileHref(a.file), primary: !a.sidecar }]),
-    html: `${isImg?`<p style="margin-bottom:24px"><img src="${fileHref(a.file)}" style="max-width:100%;border:1px solid var(--line)" alt=""></p>`:''}${a.bodyHtml?`<div class="body">${a.bodyHtml}</div>`:''}
+  const crumbs = [['Assets', '#/assets']]; // a subfolder: Assets / Brand / Logos
+  return { title: a.name, crumbs, sub: esc(`${a.ext} · ${sizeTxt(a.size)}${a.folder ? ' · ' + folderName(a.folder) : ''}`),
+    acts: noteActs(a.sidecar, [{ label: 'Open file', href: fileHref(a.file), primary: !a.sidecar }], a.file),
+    html: `${isImg(a)?`<p style="margin-bottom:24px"><img src="${fileHref(a.file)}" style="max-width:100%;border:1px solid var(--line);background:var(--white)" alt=""></p>`:''}${a.bodyHtml?`<div class="body">${a.bodyHtml}</div>`:''}
     <div style="margin-top:32px">${timeline(backlinksOf('asset',id).filter(b=>b.type==='day').map(b=>b.entry),'Mentioned in log')}${backlinksHtml('asset',id)}</div>`,
-    aside: kv([['File', `<a class="wl ext" href="${fileHref(a.file)}" target="_blank">${esc(a.file.split('/').pop())}</a>`], ['Type', esc(a.ext)], ['Date', esc(a.added)], ['Modified', a.edited], ['Project', a.project ? link('project', a.project) : ''], ['Tags', tagsHtml(a.tags)]]) };
+    aside: kv([['File', `<a class="wl ext" href="${fileHref(a.file)}" target="_blank">${esc(a.file.split('/').pop())}</a>`], ['Folder', `<code>${esc(a.file.split('/').slice(0, -1).join('/'))}</code>`], ['Type', esc(a.ext)], ['Size', sizeTxt(a.size)], ['Date', esc(a.added)], ['Modified', a.edited], ['Project', a.project ? link('project', a.project) : ''], ['Tags', tagsHtml(a.tags)]]) };
 };
 // ---------- repos: git checkouts next to the vault (build.js; Settings → Repositories) ----------
 const repoLinkBtns = (r) => r.url ? `<span class="mini" title="Copy ${esc(r.url)}" onclick="ycCopy(event, ${jsArg(r.url)}, 'Link copied')">Copy link</span>` : '<span class="none-v">No remote</span>';

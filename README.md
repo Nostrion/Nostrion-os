@@ -23,8 +23,8 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 | `Log/` | daily logs `YYYY-MM-DD.md`, each a list of time-stamped entries | day |
 | `Projects/` | project pages | project |
 | `People/` | people pages | person |
-| `Library/` | documents: `.md` notes and `.html` files (prototypes, reports, tools), named `YYYY-MM-DD_name` | document |
-| `Assets/` | any other file (pdf, png, xlsx, …), named `YYYY-MM-DD_name`; optional `.md` sidecar with the same name for notes | file |
+| `Library/` | documents: `.md` notes, `.html` files (prototypes, reports, tools) and document files (pdf, Word, PowerPoint, Excel, Keynote…), named `YYYY-MM-DD_name` | document |
+| `Assets/` | files that are not documents, in two folders: `Brand Asset/` (logos, icons, wordmarks) and `Attachment/` (images and screenshots used in notes; Obsidian puts pasted images there). More subfolders are fine. Named `YYYY-MM-DD_name`; optional `.md` sidecar with the same name for notes | file |
 | `_templates/` | Obsidian templates for new files | — |
 | `app/` | `build.js` (generator; also stamps task dates and applies task edits from the hub), `template.html` (hub UI), `main.js` + `launcher.js` (the app), `publish.js` (copy a doc to the OneDrive Publish folder), `config.json` (where that folder is), `publish-state.json` + `index.html` (generated — do not edit) | — |
 
@@ -157,6 +157,8 @@ Every file in `Library/` and `Assets/` starts with the day it was made, then an 
 
 - **HTML document** (prototype, report, tool): just drop `YYYY-MM-DD_name.html` in `Library/`. Clicking it in the hub opens the page directly, with a small floating bar (Nostrion-os · ← · →) in the top-left corner to come back; `Esc` also returns to the hub. Put its details inside the file's `<head>` — no extra `.md` needed:
 
+**Document files** (pdf, Word, PowerPoint, Excel, Keynote, Pages, Numbers) live in `Library/` too, category *document*; a `.md` with the same name describes one, and its page opens the file. In the app, hovering a row in Library or the Assets table shows **Show in Finder**.
+
   ```html
   <meta name="ycos:title" content="Acme pilot — week four report">
   <meta name="ycos:category" content="research">
@@ -170,9 +172,11 @@ Every file in `Library/` and `Assets/` starts with the day it was made, then an 
 - `category` is free text. Known values (research · framework · brief · report · tool · reference · post · note) have a fixed colour and order; any new value is picked up automatically, gets its own colour and is shown by default in every filter.
 - Categories: **research · framework · brief · report · tool · reference · post · note**. Status: `draft · live · archived`.
 
-### Asset (`Assets/2026-10-08_Acme pilot - contract.pdf` + optional `.md` sidecar)
+### Asset (`Assets/Brand Asset/2026-10-08_Nostrion icon 1024.png` + optional `.md` sidecar)
 
-Drop any file in `Assets/` with the date in front. A name starting with a project name after the date (`2026-10-08_Acme pilot - contract.pdf`) is linked to that project automatically. Optional: `2026-10-08_Acme pilot - contract.md` next to it with frontmatter (`title`, `project`, `tags`) and notes.
+Drop a brand file in `Assets/Brand Asset/` or an image for a note in `Assets/Attachment/`, with the date in front. A name starting with a project name after the date (`2026-10-08_Acme pilot - contract.pdf`) is linked to that project automatically. Optional: `2026-10-08_Acme pilot - contract.md` next to it with frontmatter (`title`, `project`, `tags`) and notes.
+
+**Folders and views.** `Assets/` has two folders by default, `Brand Asset/` and `Attachment/`; documents (pdf, Word, PowerPoint, Excel…) go in `Library/`, and the build warns about a document left in `Assets/`. Subfolders (any depth) are read too; the hub shows the folder on each file and groups by it. The Assets page switches between **Cards** (thumbnails, whole file, never cropped) and **Table** (thumbnail, name, sidecar note, type, project, size, dates, sortable headers), and groups by **Folder**, **Project**, **Month** or not at all. Moving a file to another folder keeps `[[links]]` working, they use the file name. `node app/datename.js` dates files in subfolders too.
 
 ## Publishing (sharing a document)
 

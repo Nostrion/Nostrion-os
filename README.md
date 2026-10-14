@@ -41,7 +41,7 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 The app is compiled once from `app/launcher.js` (Terminal; only needed again if `launcher.js` changes):
 
 ```
-osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js && cp ~/Nostrion-os/app/Nostrion-os.icns /Applications/Nostrion-os.app/Contents/Resources/applet.icns && plutil -remove CFBundleIconName /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleName -string Nostrion-os /Applications/Nostrion-os.app/Contents/Info.plist
+osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js && cp ~/Nostrion-os/app/Nostrion-os.icns /Applications/Nostrion-os.app/Contents/Resources/applet.icns && plutil -remove CFBundleIconName /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleName -string Nostrion-os /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleIdentifier -string com.nostrion.os /Applications/Nostrion-os.app/Contents/Info.plist && codesign --force --deep -s - /Applications/Nostrion-os.app
 ```
 
 Everything else lives in the vault and can change without recompiling: `app/main.js` (window + bridge), `app/build.js` (generator), `app/template.html` (hub UI). Build the hub from a terminal with `node app/build.js` or `osascript -l JavaScript app/build.js ~/Nostrion-os`.

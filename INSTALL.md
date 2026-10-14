@@ -29,10 +29,10 @@ or without Node: `osascript -l JavaScript app/build.js ~/Nostrion-os`. Open `app
 It opens the hub in its own window, redraws it whenever a file changes, and lets you edit notes and tasks, set your name and settings, and install updates from this repo (Settings → Updates).
 
 ```
-osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js && cp ~/Nostrion-os/app/Nostrion-os.icns /Applications/Nostrion-os.app/Contents/Resources/applet.icns && plutil -remove CFBundleIconName /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleName -string Nostrion-os /Applications/Nostrion-os.app/Contents/Info.plist
+osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js && cp ~/Nostrion-os/app/Nostrion-os.icns /Applications/Nostrion-os.app/Contents/Resources/applet.icns && plutil -remove CFBundleIconName /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleName -string Nostrion-os /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleIdentifier -string com.nostrion.os /Applications/Nostrion-os.app/Contents/Info.plist && codesign --force --deep -s - /Applications/Nostrion-os.app
 ```
 
-Then open the app from Applications. The first launch may ask for permission to control Obsidian or to read folders; allow it. Then ask the person for their name and enter it under Settings (bottom of the sidebar), or set `profile.name` in `app/config.json`.
+Then open the app from Applications. The first launch may ask for permission to control Obsidian or to read folders (OneDrive, for published documents); allow it. It appears as **Nostrion-os** under System Settings → Privacy & Security → Files & Folders; without the app ID set above it would show as "applet". Then ask the person for their name and enter it under Settings (bottom of the sidebar), or set `profile.name` in `app/config.json`.
 
 ## 5. Skills
 

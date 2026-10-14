@@ -89,7 +89,7 @@ function ycosUpdates(root, install) {
     if (!install || !changed.length) return res;
     if (u.develop) return { ok: false, repo: repo, error: 'This vault is the development copy: it is not overwritten from the repo.' };
     var take = changed.filter(function (f) { return inRepo.indexOf(f) >= 0; });
-    if (take.length) ycosSh(git + 'checkout FETCH_HEAD -- ' + take.map(q).join(' ') + ' && /usr/bin/git reset -q -- ' + take.map(q).join(' '));
+    if (take.length) ycosSh(git + 'checkout FETCH_HEAD -- ' + take.map(q).join(' ')); // also staged, so new files (fonts) count as installed on the next check
     res.installed = take; res.launcher = take.indexOf('app/launcher.js') >= 0; res.changed = [];
     return res;
   } catch (e) { return { ok: false, repo: repo, error: String(e && e.message || e).replace(/^.*?error:\s*/i, '') }; }

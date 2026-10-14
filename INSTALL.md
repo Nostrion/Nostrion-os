@@ -26,13 +26,13 @@ or without Node: `osascript -l JavaScript app/build.js ~/Nostrion-os`. Open `app
 
 ## 4. The Mac app (macOS only, optional but recommended)
 
-It opens the hub in its own window, rebuilds whenever a file changes, and lets you tick and edit tasks from the hub.
+It opens the hub in its own window, redraws it whenever a file changes, and lets you edit notes and tasks, set your name and settings, and install updates from this repo (Settings → Updates).
 
 ```
 osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js && cp ~/Nostrion-os/app/Nostrion-os.icns /Applications/Nostrion-os.app/Contents/Resources/applet.icns && plutil -remove CFBundleIconName /Applications/Nostrion-os.app/Contents/Info.plist && plutil -replace CFBundleName -string Nostrion-os /Applications/Nostrion-os.app/Contents/Info.plist
 ```
 
-Then open the app from Applications. The first launch may ask for permission to control Obsidian or to read folders; allow it.
+Then open the app from Applications. The first launch may ask for permission to control Obsidian or to read folders; allow it. Then ask the person for their name and enter it under Settings (bottom of the sidebar), or set `profile.name` in `app/config.json`.
 
 ## 5. Skills
 

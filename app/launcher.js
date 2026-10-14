@@ -1,7 +1,9 @@
-// Source of Nostrion-os.app — a tiny stay-open applet that loads app/main.js from the vault at every launch.
-// Compile once (Terminal), then never again unless this file changes:
-//   osacompile -l JavaScript -s -o /Applications/Nostrion-os.app ~/Nostrion-os/app/launcher.js
-// The vault is looked for at ~/Nostrion-os, next to the app, ~/Desktop/Nostrion-os, ~/Documents/Nostrion-os (first match wins).
+// Source of the Mac app — a tiny stay-open applet that loads app/main.js from the vault at every launch.
+// Compile once (Terminal), then never again unless this file changes (README → The app):
+//   osacompile -l JavaScript -s -o "/Applications/<APP>.app" <vault>/app/launcher.js
+// The vault is the folder chosen under Settings → Vault, else the first of FOLDERS (in your home folder) or the folder next to the app.
+
+var APP = 'Nostrion-os', FOLDERS = ['Nostrion-os', 'Desktop/Nostrion-os', 'Documents/Nostrion-os'];
 
 ObjC.import('Cocoa');
 var YC = {};
@@ -10,7 +12,10 @@ function ycosFindRoot() {
   var fm = $.NSFileManager.defaultManager;
   var bundle = ObjC.unwrap($.NSBundle.mainBundle.bundlePath);
   var home = ObjC.unwrap($.NSHomeDirectory());
-  var candidates = [home + '/Nostrion-os', bundle.replace(/\/[^\/]+$/, '') + '/Nostrion-os', home + '/Desktop/Nostrion-os', home + '/Documents/Nostrion-os'];
+  // Settings → Vault writes the chosen folder to this file (main.js, ycosSetVault)
+  var pointer = $.NSString.stringWithContentsOfFileEncodingError(home + '/Library/Application Support/' + APP + '/vault', $.NSUTF8StringEncoding, null);
+  var chosen = pointer.isNil() ? '' : ObjC.unwrap(pointer).trim();
+  var candidates = (chosen ? [chosen] : []).concat(FOLDERS.map(function (f) { return home + '/' + f; }), [bundle.replace(/\/[^\/]+$/, '') + '/' + FOLDERS[0].split('/').pop()]);
   for (var i = 0; i < candidates.length; i++) if (fm.fileExistsAtPath(candidates[i] + '/app/main.js')) return candidates[i];
   return null;
 }
@@ -19,7 +24,7 @@ function run() {
   var root = ycosFindRoot();
   if (!root) {
     var a = Application.currentApplication(); a.includeStandardAdditions = true;
-    a.displayAlert('Nostrion-os vault not found', { message: 'Expected the Nostrion-os folder next to Nostrion-os.app or at ~/Desktop/Nostrion-os.' });
+    a.displayAlert(APP + ': vault not found', { message: 'Expected the vault at ~/' + FOLDERS[0] + ' or next to the app.' });
     return;
   }
   var src = ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(root + '/app/main.js', $.NSUTF8StringEncoding, null));

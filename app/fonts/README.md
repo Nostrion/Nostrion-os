@@ -1,5 +1,6 @@
-Put Cabinet Grotesk here (free, https://www.fontshare.com/fonts/cabinet-grotesk → Download → unzip → `Fonts/WEB/fonts/`):
+The hub's fonts, the same as the Nostrion product dev hub (no network needed):
 
-- CabinetGrotesk-Variable.woff2   (one file covers all weights)
+- GeneralSans-400/500/600.woff2: General Sans (Fontshare, free), all text
+- Gabarito-600.woff2: Gabarito (Google Fonts, OFL), the NOSTRION wordmark
 
-The hub uses it when present; otherwise it loads from Fontshare online, otherwise the system font.
+CabinetGrotesk-Variable.woff2 is no longer used.

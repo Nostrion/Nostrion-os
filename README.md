@@ -14,7 +14,7 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 
 ## How it works
 
-**Source of truth = the Markdown files.** The hub is a view: the only thing it writes is task lines (tick, edit, add). Edit everything else in Obsidian (or any editor); the hub rebuilds itself.
+**Source of truth = the Markdown files.** The hub is a view. Inside the app it can also write: task lines (tick, edit, add), a note's `status:`, moving a note to `.trash/`, the whole note in the built-in editor, and `app/config.json` from Settings. Edit in the app, in Obsidian or in any editor; the hub redraws itself when a file changes.
 
 ## Folders
 
@@ -30,7 +30,13 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 
 ## The app / rebuilding the hub
 
-**Nostrion-os.app** (Applications, Dock) opens the hub in its own window. It rebuilds on launch, whenever a vault file changes (checked every 3 s), on ⌘R and via *↻ rebuild*. It runs on macOS's built-in JavaScript — nothing to install. The vault lives at `~/Nostrion-os`.
+**Nostrion-os.app** (Applications, Dock) opens the hub in its own window. It reads the vault again on launch and whenever a vault file changes (checked every 3 s); *Refresh* at the bottom of the sidebar (or ⌘R) does it by hand, for when a change does not show up. It runs on macOS's built-in JavaScript — nothing to install. The vault lives at `~/Nostrion-os`, or wherever **Settings → Vault** points.
+
+**Editing in the app.** Every note page has **Edit** (or press `E`): the whole Markdown file, frontmatter included. `⌘S` saves, `Esc` cancels. `Tab` / `⇧Tab` indent or outdent a bullet (nested bullets show as nested lists), `Enter` continues a bullet, numbered line or task. A draft survives a reload; a save is refused when the file changed since it was opened (Obsidian, a sync), and you choose: load that version or overwrite. Prefer Obsidian? Settings → Obsidian → *The Edit button opens: Obsidian*.
+
+**Settings** (your name at the bottom of the sidebar): profile, vault folder (*Connect another vault…*), Obsidian vault name and editor, the Publish folder, and which folders the Repos page scans. Saved in `app/config.json`.
+
+**Updates.** Settings → Updates checks this repo and lists the app files that changed. *Install update* replaces only the app's own files (`app/*.js`, `app/template.html`, `app/fonts`, README, INSTALL); notes and `app/config.json` stay. This needs the vault to be a `git clone` (as in INSTALL.md). When `app/launcher.js` changed, build the app once more (below).
 
 The app is compiled once from `app/launcher.js` (Terminal; only needed again if `launcher.js` changes):
 
@@ -44,7 +50,9 @@ Lists (Daily Log, Tasks, Projects, People, Library, Assets, Hours entries) share
 
 **Projects** has one tab per stage: *Active* (active and paused), *Ideas* (cards), *Done* and *Archived* (a record with started, ended and hours) and *All*. Tables group by category by default, or by status, or not at all (*group* on the right). Subprojects stay under their parent and count in the parent's group; one shown apart from its parent names it (*Homepage copy · Website relaunch*). Column headers **sort**; filters and sort are remembered across rebuilds; *reset* brings a page back to its defaults.
 
-Keyboard: `⌘R` rebuild + refresh · `⌘[` / `⌘]` back / forward · `←` `→` previous / next day · `/` or `⌘K` search. Every page has an "edit in Obsidian" link (the Obsidian vault must be named `Nostrion-os`).
+**Daily Log** groups by week, project (one row per day and project, with that project's work and hours), month, or not at all. Long sections on a page fold; the hub remembers which ones you closed.
+
+Keyboard: `/` or `⌘K` search · `E` edit the note on screen · `N` new task · `⌘R` refresh · `⌘[` / `⌘]` back / forward · `←` `→` previous / next day. The ••• menu on a note opens it in Obsidian (the vault name in Obsidian is set under Settings → Obsidian).
 
 **Repos** lists the git repositories next to the vault: every folder in `~` with a `.git` folder (the standard macOS folders are skipped). Per repo: what it is about (first paragraph of its README), project, owner and host, branch, last change, and *copy link* for the GitHub or Codeberg page; the repo page shows the clone address, the local folder and the README. Nothing is stored for this: the hub reads each `.git` folder on every rebuild. A repo belongs to the project whose note has `repo: <folder name or URL>` (a list for several), else to the project with the same name. `app/config.json` → `repos` sets where to look (`roots`), what to skip (`exclude`, e.g. a private vault) and a one-line description for a repo without a useful README (`about`).
 

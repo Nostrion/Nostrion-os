@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Nostrion-os publish — copy Library documents into the Publish folder (OneDrive, see app/config.json) so a share link can be made.
+// Publish — copy Library documents into the Publish folder (OneDrive, see app/config.json) so a share link can be made.
 // The vault stays the single source of truth; the Publish folder only ever holds copies, named like the vault file.
 //
 //   node app/publish.js                       status: every Library document and whether its published copy is current
@@ -38,6 +38,7 @@ function docs() {
     const src = fs.readFileSync(path.join(LIB, n), 'utf8'); const fm = (src.match(/^---\n([\s\S]*?)\n---/) || ['', ''])[1];
     const get = (k) => (fm.match(new RegExp('^' + k + ':\\s*(.*)$', 'm')) || ['', ''])[1].trim().replace(/^["']|["']$/g, '');
     const file = get('file').replace(/^Library\//, '');
+    if (/^~?\//.test(file)) continue; // lives outside the vault (e.g. already in the shared folder): nothing to copy
     out.push({ stem, title: get('title') || stem, src: 'Library/' + (file || n) });
   }
   for (const n of names.filter(n => !n.endsWith('.md'))) {

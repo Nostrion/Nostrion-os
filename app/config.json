@@ -9,5 +9,19 @@
     "exclude": [],
     "about": {}
   },
-  "_comment_repos": "Repos page: git checkouts next to the vault. roots: folders to look in (each child folder with a .git folder is a repo; the standard macOS folders are skipped). exclude: folder names to leave out, e.g. a private vault. about: a one-line description per folder name, used instead of the README."
+  "_comment_repos": "Repos page: git checkouts next to the vault. roots: folders to look in (each child folder with a .git folder is a repo; the standard macOS folders are skipped). exclude: folder names to leave out, e.g. a private vault. about: a one-line description per folder name, used instead of the README.",
+  "appName": "Nostrion-os",
+  "profile": {
+    "name": "",
+    "role": ""
+  },
+  "obsidian": {
+    "vault": "",
+    "editIn": "app"
+  },
+  "updates": {
+    "repo": "https://github.com/Nostrion/Nostrion-os",
+    "branch": "main"
+  },
+  "_comment_app": "appName: the name in the window and the sidebar. profile: your name (Settings → Profile). obsidian.vault: the vault name in Obsidian (empty = the folder name); editIn: \"app\" or \"obsidian\" for the Edit button. updates: where Settings → Updates gets new app code. Everything here can be changed under Settings in the app."
 }

@@ -1,4 +1,4 @@
-// Nostrion-os hub builder — runs in Node (`node app/build.js`) AND in macOS's built-in JavaScript
+// Hub builder — runs in Node (`node app/build.js`) AND in macOS's built-in JavaScript
 // (`osascript -l JavaScript app/build.js <vault>`), so no install is needed on a Mac.
 // Reads the vault (Log, Projects, People, Library, Assets) and writes app/index.html from app/template.html.
 
@@ -119,16 +119,47 @@ function trashNote(io, ROOT, req) {
   return { ok: true, file, trashed: '.trash/' + dest.slice(dir.length + 1) };
 }
 
+// ---------- note editing in the app: read the whole file, write it back when nobody else changed it meanwhile ----------
+const EDIT_FILE = /^(?:(?:Log|People|Projects|Library|Assets)\/[^/]+|README)\.md$/; // markdown notes only, no paths outside the vault
+function readNote(io, ROOT, req) { // req: {file} → {ok, file, text}
+  const file = String(req && req.file || ''); if (!EDIT_FILE.test(file)) return { ok: false, file, error: 'only markdown notes in Log/, People/, Projects/, Library/ and Assets/ can be edited in the app' };
+  const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, file, error: file + ' no longer exists' };
+  return { ok: true, file, text: io.read(p) };
+}
+// req: {file, text, base (the text as it was opened), force} → refuses when the file changed since it was opened (Obsidian, a sync, a task stamp), unless force
+function saveNote(io, ROOT, req) {
+  const file = String(req && req.file || ''); if (!EDIT_FILE.test(file)) return { ok: false, file, error: 'only markdown notes in Log/, People/, Projects/, Library/ and Assets/ can be edited in the app' };
+  const p = ROOT + '/' + file; const now = io.exists(p) ? io.read(p) : null;
+  if (now === null) return { ok: false, file, error: file + ' no longer exists' };
+  if (!req.force && now !== String(req.base)) return { ok: false, file, conflict: true, error: 'The file changed since you opened it (Obsidian, a sync or a task update).' };
+  io.write(p, String(req.text));
+  return { ok: true, file };
+}
+
+// req: the Settings page's fields → merged into app/config.json (keys the page does not know, and the _comment lines, stay)
+function saveConfig(io, ROOT, req) {
+  const p = ROOT + '/app/config.json'; let c = {}; try { c = JSON.parse(io.read(p)); } catch (e) {}
+  const str = (v) => String(v == null ? '' : v).trim(); const list = (v) => (Array.isArray(v) ? v : String(v || '').split(/[\n,]/)).map(x => String(x).trim()).filter(Boolean);
+  if ('name' in req || 'role' in req) c.profile = Object.assign({}, c.profile, 'name' in req ? { name: str(req.name) } : {}, 'role' in req ? { role: str(req.role) } : {});
+  if ('obsidianVault' in req || 'editIn' in req) c.obsidian = Object.assign({}, c.obsidian, 'obsidianVault' in req ? { vault: str(req.obsidianVault) } : {}, 'editIn' in req ? { editIn: req.editIn === 'obsidian' ? 'obsidian' : 'app' } : {});
+  if ('publishDir' in req) c.publishDir = str(req.publishDir);
+  if ('shareBase' in req) c.shareBase = str(req.shareBase);
+  if ('repoRoots' in req || 'repoExclude' in req || 'repoPersonal' in req) { c.repos = Object.assign({}, c.repos); if ('repoRoots' in req) c.repos.roots = list(req.repoRoots); if ('repoExclude' in req) c.repos.exclude = list(req.repoExclude); }
+  io.write(p, JSON.stringify(c, null, 2) + '\n');
+  return { ok: true };
+}
+
 function buildVault(io, ROOT) {
 io.pending = stampTasks(io, ROOT); // added:: / done:: on task lines (io.pending → main.js builds again once the file is quiet)
 const join = function () { return Array.prototype.slice.call(arguments).join('/'); };
-const VAULT_NAME = ROOT.split('/').filter(Boolean).pop();
+const CONFIG0 = (() => { try { return JSON.parse(io.read(join(ROOT, 'app', 'config.json'))); } catch (e) { return {}; } })();
+const VAULT_NAME = String((CONFIG0.obsidian || {}).vault || '') || ROOT.split('/').filter(Boolean).pop(); // the vault's name in Obsidian (obsidian:// links)
 const OUT = join(ROOT, 'app', 'index.html');
 const TEMPLATE = join(ROOT, 'app', 'template.html');
 const CATEGORIES = ['meeting', 'build', 'research', 'writing', 'admin', 'learning'];
 const PRIORITIES = ['do', 'plan', 'delegate', 'later']; // Eisenhower: urgent+important · important · urgent · neither
 const LIBRARY_CATEGORIES = ['research', 'framework', 'brief', 'report', 'tool', 'reference', 'post', 'note']; // display order only: any other value in ycos:category works and is listed after these
-const CONFIG = (() => { try { return JSON.parse(io.read(join(ROOT, 'app', 'config.json'))); } catch (e) { return {}; } })(); // app/config.json
+const CONFIG = CONFIG0; // app/config.json (Settings in the app writes it, saveConfig)
 const PUBLISH_DIR = String(CONFIG.publishDir || '').replace(/^~(?=\/|$)/, io.home()); // copies of shared Library docs live here (OneDrive)
 const SHARE_BASE = String(CONFIG.shareBase || '').replace(/\/+$/, ''); // web address of that folder → per-file links in the hub
 
@@ -265,18 +296,25 @@ function markdown(md, resolve) {
       out.push(`<table><thead><tr>${head.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`); continue;
     }
     const li = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
-    if (li) {
-      flush(); const ordered = /\d/.test(li[2]); const items = [];
+    if (li) { // nested lists: indentation (a tab, as Obsidian writes it, or spaces) sets the level
+      flush(); const items = []; const width = (s) => s.replace(/\t/g, '    ').length;
       while (i < lines.length) {
         const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
-        if (!m) { if (/^\s{2,}\S/.test(lines[i]) && items.length) { items[items.length - 1] += ' ' + lines[i].trim(); i++; continue; } break; }
-        items.push(m[3]); i++;
+        if (!m) { if (/^(\t|\s{2,})\S/.test(lines[i]) && items.length) { items[items.length - 1].text += ' ' + lines[i].trim(); i++; continue; } break; }
+        items.push({ ind: width(m[1]), ordered: /\d/.test(m[2]), text: m[3] }); i++;
       }
-      const render = (t) => { const task = t.match(/^\[([ xX\/\-])\]\s+(.*)$/); if (!task) return `<li>${inline(t, resolve)}</li>`;
+      const render = (t, kids) => { const task = t.match(/^\[([ xX\/\-])\]\s+(.*)$/); if (!task) return `<li>${inline(t, resolve)}${kids}</li>`;
         const st = task[1].toLowerCase(); const f = taskFields(task[2]);
         const meta = [f.priority, f.due ? 'due ' + f.due : '', f.waiting ? 'waiting on ' + f.waiting.replace(/\[\[|\]\]/g, '') : '', /^\d{4}/.test(f.done || '') && st !== ' ' ? 'done ' + f.done : ''].filter(Boolean).join(' · ');
-        return `<li class="task ${st === 'x' ? 'done' : st === '-' ? 'cancelled' : st === '/' ? 'doing' : ''}"><span class="box">${st === 'x' ? '✓' : st === '/' ? '◐' : st === '-' ? '×' : ''}</span>${inline(f.text, resolve)}${meta ? ` <span class="tmeta">${esc(meta)}</span>` : ''}</li>`; };
-      out.push(`<${ordered ? 'ol' : 'ul'}>${items.map(render).join('')}</${ordered ? 'ol' : 'ul'}>`); continue;
+        return `<li class="task ${st === 'x' ? 'done' : st === '-' ? 'cancelled' : st === '/' ? 'doing' : ''}"><span class="trow"><span class="box">${st === 'x' ? '✓' : st === '/' ? '◐' : st === '-' ? '×' : ''}</span><span>${inline(f.text, resolve)}${meta ? ` <span class="tmeta">${esc(meta)}</span>` : ''}</span></span>${kids}</li>`; };
+      let pos = 0;
+      const list = (ind) => { // items at this indent are siblings; a deeper item opens a list inside the one before it
+        const ordered = items[pos].ordered; const tag = ordered ? 'ol' : 'ul'; let html = '';
+        while (pos < items.length && (items[pos].ind > ind || (items[pos].ind === ind && items[pos].ordered === ordered))) { const it = items[pos++]; html += render(it.text, pos < items.length && items[pos].ind > it.ind ? list(items[pos].ind) : ''); }
+        return `<${tag}>${html}</${tag}>`;
+      };
+      while (pos < items.length) out.push(list(items[pos].ind));
+      continue;
     }
     if (/^>\s?/.test(line)) { flush(); const buf = []; while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, '')); out.push(`<blockquote>${markdown(buf.join('\n'), resolve)}</blockquote>`); continue; }
     if (/^[a-zA-Z_][\w-]*::\s*/.test(line)) { i++; continue; } // inline fields handled elsewhere
@@ -315,9 +353,10 @@ for (const e of listDir(join(ROOT, 'Projects'))) {
     const p = join(dir, e.name); const { data, body } = parseFrontmatter(readMd(p)); const stem = e.name.replace(/\.md$/, '');
     mdStems.add(stem);
     const u = undate(stem);
-    docs.push({ type: 'doc', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p),
+    const ext = /^~?\//.test(String(data.file || '')); // file: an absolute path → the document lives outside the vault (e.g. a shared OneDrive folder)
+    docs.push({ type: 'doc', id: slug(stem), name: data.title || u.base, stem, base: u.base, dated: u.date, file: rel(p), edited: fileDate(p), external: ext,
       category: data.category || 'note', status: data.status || 'draft', added: data.added ? String(data.added) : u.date || fileDate(p),
-      projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), open: data.file ? 'Library/' + String(data.file).replace(/^Library\//, '') : '', fm: data, body });
+      projectName: namesFrom(data.project)[0] || '', tags: namesFrom(data.tags), open: data.file ? (ext ? String(data.file).replace(/^~(?=\/)/, io.home()) : 'Library/' + String(data.file).replace(/^Library\//, '')) : '', fm: data, body });
   }
   for (const e of files.filter(f => !f.name.endsWith('.md'))) {
     const stem = e.name.replace(/\.[^.]+$/, ''); if (mdStems.has(stem)) continue; // has sidecar → already listed
@@ -521,6 +560,11 @@ const fromRecord = (d, abs) => { // compare the vault file with the recorded cop
 // the name publish.js recorded for this source, else the file name, else the file name without its date
 const recBySource = new Map(Object.entries(pubRecord || {}).map(([k, r]) => [r.source, k]));
 for (const d of docs) {
+  if (d.external) { // outside the vault: a file in the Publish folder is the shared copy itself, nothing to compare
+    const inPub = PUBLISH_DIR && d.open.startsWith(PUBLISH_DIR + '/'); let date = ''; try { date = fileDate(d.open); } catch (e) {}
+    d.pubFile = inPub ? d.open.slice(PUBLISH_DIR.length + 1).split('/')[0] : ''; d.pub = inPub ? { state: 'current', date, via: 'external' } : { state: 'none' };
+    continue;
+  }
   const src = d.open || d.file; const own = d.bundle || src.split('/').pop();
   const cands = [recBySource.get(d.bundle ? 'Library/' + d.bundle : src), own, undate(own).base].filter(Boolean);
   d.pubFile = (pubNames && cands.find(n => pubNames.has(n))) || cands[0]; const copy = join(PUBLISH_DIR, d.pubFile); const abs = d.bundle ? join(ROOT, 'Library', d.bundle) : join(ROOT, src);
@@ -575,7 +619,7 @@ const repos = [];
     const name = e.name; const projFm = projects.find(p => [].concat(p.fm.repo || []).some(r => { const pw = webUrl(r); return String(r).toLowerCase() === name.toLowerCase() || (pw && w && pw.url.toLowerCase() === w.url.toLowerCase()); }));
     repos.push({ type: 'repo', id: slug(name), name, path: dir, home: dir.startsWith(io.home() + '/') ? '~' + dir.slice(io.home().length) : dir,
       remote, url: w ? w.url : '', host: w ? HOSTS[w.host] || w.host : 'local only', owner: w ? w.path.split('/')[0] : '', branch, lastDate: last ? last.date : fileDate(join(git, 'HEAD')), lastMsg: last ? last.msg : '',
-      description: descFrom ? descFrom[1] : '', descFrom: descFrom ? descFrom[0] : '', stack, project: projFm ? projFm.id : (projects.find(p => p.id.replace(/-/g, '') === slug(name).replace(/-/g, '')) || {}).id || null,
+      description: descFrom ? descFrom[1] : '', descFrom: descFrom ? descFrom[0] : '', stack, project: projFm ? projFm.id : (projects.find(p => p.id.replace(/-/g, '') === slug(name).replace(/-/g, '')) || {}).id || null, 
       // relative links in the README (INSTALL.md, docs/) point at the local checkout
       readmeHtml: readme ? markdown(readme.replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, ''), () => null).replace(/href="(?!https?:|mailto:|#)([^"]+)"/g, (_, h) => 'href="file://' + encodeURI(dir + '/' + h.replace(/^\.\//, '')) + '"') : '' });
   }
@@ -589,6 +633,13 @@ const data = {
   priorities: PRIORITIES, tasks: tasks.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || b.date.localeCompare(a.date)),
   days, repos, people: people.sort(sortByName), projects: projects.sort(sortByName), docs: docs.sort((a, b) => b.edited.localeCompare(a.edited) || a.name.localeCompare(b.name)), assets: assets.sort((a, b) => b.edited.localeCompare(a.edited)),
   weeks: weekList, backlinks: Object.fromEntries(backlinks),
+  settings: { // what the Settings page shows and edits (app/config.json), plus where this vault is
+    name: String((CONFIG.profile || {}).name || ''), role: String((CONFIG.profile || {}).role || ''), vaultPath: ROOT, home: io.home(),
+    obsidianVault: VAULT_NAME, editIn: (CONFIG.obsidian || {}).editIn === 'obsidian' ? 'obsidian' : 'app',
+    publishDir: String(CONFIG.publishDir || ''), shareBase: SHARE_BASE,
+    repoRoots: (REPOS.roots || ['~']).map(String), repoExclude: (REPOS.exclude || []).map(String),
+    appName: String(CONFIG.appName || 'Nostrion-os'), // the name in the window, the sidebar and the tab
+    updates: { repo: String((CONFIG.updates || {}).repo || 'https://github.com/Nostrion/Nostrion-os'), branch: String((CONFIG.updates || {}).branch || 'main'), develop: !!(CONFIG.updates || {}).develop } },
   publish: { dir: PUBLISH_DIR, shareBase: SHARE_BASE, available: pubAvailable, source: pubSource, current: pubCounts.current, outdated: pubCounts.outdated },
   readme: io.exists(join(ROOT, 'README.md')) ? markdown(parseFrontmatter(readMd(join(ROOT, 'README.md'))).body, resolve) : '',
   totals: { hours: Math.round(days.reduce((s, d) => s + d.hours, 0) * 100) / 100, entries: days.reduce((s, d) => s + d.entries.length, 0) },
@@ -597,7 +648,7 @@ const json = JSON.stringify(data).replace(/<\/script/gi, '<\\/script');
 const template = io.read(TEMPLATE);
 if (!template.includes('/*__DATA__*/')) throw new Error('template.html is missing the /*__DATA__*/ marker');
 io.write(OUT, template.replace('/*__DATA__*/', () => 'window.YCOS=' + json + ';'));
-return (warnings.length ? warnings.map(w => '⚠ ' + w).join('\n') + '\n' : '') + 'Nostrion-os hub built → app/index.html  (' + days.length + ' days, ' + data.totals.entries + ' entries, ' + data.totals.hours + 'h, ' + people.length + ' people, ' + projects.length + ' projects, ' + docs.length + ' docs, ' + assets.length + ' assets, ' + repos.length + ' repos, ' + pubCounts.current + ' published' + (pubCounts.outdated ? ', ' + pubCounts.outdated + ' outdated' : '') + (pubSource === 'folder' ? '' : pubSource === 'record' ? ', publish state from last publish run' : ', publish folder unavailable/no access') + ')';
+return (warnings.length ? warnings.map(w => '⚠ ' + w).join('\n') + '\n' : '') + 'Hub built → app/index.html  (' + days.length + ' days, ' + data.totals.entries + ' entries, ' + data.totals.hours + 'h, ' + people.length + ' people, ' + projects.length + ' projects, ' + docs.length + ' docs, ' + assets.length + ' assets, ' + repos.length + ' repos, ' + pubCounts.current + ' published' + (pubCounts.outdated ? ', ' + pubCounts.outdated + ' outdated' : '') + (pubSource === 'folder' ? '' : pubSource === 'record' ? ', publish state from last publish run' : ', publish folder unavailable/no access') + ')';
 }
 
 // ---------- environments ----------
@@ -630,13 +681,13 @@ function jxaIO() { // macOS: osascript -l JavaScript (JavaScript for Automation)
 }
 
 if (typeof require === 'function' && typeof module !== 'undefined') {           // Node
-  module.exports = { buildVault, nodeIO, hashText, editTask, editStatus, trashNote, stampTasks };
+  module.exports = { buildVault, nodeIO, hashText, editTask, editStatus, trashNote, readNote, saveNote, saveConfig, stampTasks };
   const path = require('path');
   if (require.main === module || /build\.m?js$/.test(String(process.argv[1] || ''))) { // run directly (node app/build.js [vault]) — not when required by publish.js
     console.log(buildVault(nodeIO(), path.resolve(process.argv[2] || path.join(__dirname, '..'))));
   }
 }
-function run(argv) { // entry point when executed with osascript -l JavaScript (argv[0] = vault path, default ~/Desktop/Nostrion-os)
-  const root = String(argv && argv[0] || '').replace(/\/+$/, '') || ObjC.unwrap($.NSHomeDirectory()) + '/Desktop/Nostrion-os';
+function run(argv) { // entry point when executed with osascript -l JavaScript (argv[0] = vault path, default: the vault folder in your home folder)
+  const root = String(argv && argv[0] || '').replace(/\/+$/, '') || ObjC.unwrap($.NSHomeDirectory()) + '/Nostrion-os';
   return buildVault(jxaIO(), root);
 }

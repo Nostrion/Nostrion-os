@@ -96,10 +96,32 @@ function editTask(io, ROOT, req) {
 
 // ---------- note actions (status / delete) — called from the app like editTask ----------
 const NOTE_FILE = /^(Projects|Library|People)\/[^/]+\.md$/; // only markdown notes in these folders; HTML documents keep their meta tags
-// req: {file (vault-relative), status} → rewrites `status:` in the note's frontmatter (added when missing)
+// req: {file (vault-relative), status, category?} → sets the status where that kind of file keeps it:
+//   a note (.md in Projects/, Library/, People/): `status:` in the frontmatter (added when missing)
+//   an HTML document in Library/ (or the main page of a folder document): <meta name="ycos:status">
+//   any other Library file (pdf, Office…): a note next to it with the same name, created when missing, holds the status
+const LIB_HTML = /^Library\/(?!\.)[^/]+(?:\/(?!\.)[^/]+)?\.html?$/i, LIB_FILE = /^Library\/(?!\.)[^/]+\.(?!md$)[A-Za-z0-9]+$/;
 function editStatus(io, ROOT, req) {
-  const file = String(req && req.file || ''); if (!NOTE_FILE.test(file)) return { ok: false, error: 'status can only be set on notes in Projects/, Library/ and People/' };
+  let file = String(req && req.file || '');
   const status = String(req.status || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9 -]*$/.test(status)) return { ok: false, error: 'not a valid status: ' + req.status };
+  if (LIB_HTML.test(file)) {
+    const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, error: file + ' no longer exists' };
+    let src = io.read(p); const tag = '<meta name="ycos:status" content="' + status + '">';
+    const re = /<meta\s+[^>]*name=["']ycos:status["'][^>]*>/i;
+    if (re.test(src)) src = src.replace(re, tag);
+    else if (/<meta\s+charset[^>]*>/i.test(src)) src = src.replace(/(<meta\s+charset[^>]*>)/i, '$1\n' + tag);
+    else if (/<head[^>]*>/i.test(src)) src = src.replace(/(<head[^>]*>)/i, '$1\n' + tag);
+    else src = tag + '\n' + src;
+    io.write(p, src);
+    return { ok: true, file, status };
+  }
+  if (LIB_FILE.test(file)) { // a pdf or similar: its status goes into a note of the same name
+    const note = file.replace(/\.[^.]+$/, '.md'); const p = ROOT + '/' + note;
+    if (!io.exists(ROOT + '/' + file)) return { ok: false, error: file + ' no longer exists' };
+    if (!io.exists(p)) { const cat = String(req.category || '').trim().toLowerCase(); io.write(p, '---\nstatus: ' + status + (/^[a-z][a-z0-9 -]*$/.test(cat) ? '\ncategory: ' + cat : '') + '\n---\n'); return { ok: true, file: note, status, created: true }; }
+    file = note;
+  }
+  if (!NOTE_FILE.test(file)) return { ok: false, error: 'status can only be set on notes in Projects/, Library/ and People/, and on Library documents' };
   const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, error: file + ' no longer exists' };
   let src = io.read(p); const cr = src.includes('\r\n'); if (cr) src = src.replace(/\r\n/g, '\n');
   const m = src.match(/^---\n([\s\S]*?)\n---(\n|$)/);

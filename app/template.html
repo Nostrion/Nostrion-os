@@ -150,7 +150,14 @@
   .fbtn.def{border-style:dashed}
   .fgrp.open .fbtn:not(.on){border-color:var(--ink);color:var(--ink)}
   .menu,.fpop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:220px;max-height:340px;overflow:auto;background:var(--white);border:1px solid var(--line);padding:4px;scrollbar-width:thin}
-  .menu.right{left:auto;right:0}
+  .menu.end{left:auto;right:0}
+  .menu.stmenu{min-width:150px}
+  .menu.stmenu button{justify-content:space-between}
+  .menu.stmenu .tick{font-size:12px;color:var(--ink)}
+  .pillbtn{border:0;padding:0;background:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font:inherit}
+  .pillbtn .pill{transition:box-shadow var(--t-fast)}
+  .pillbtn:hover .pill,.pillbtn[aria-expanded="true"] .pill{box-shadow:0 0 0 1px var(--surface),0 0 0 2px var(--ink)}
+  .pillbtn .pill::after{content:"";display:inline-block;width:4px;height:4px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(45deg);margin:0 0 3px 6px;opacity:.7}
   .menu button,.menu a,.fopt{display:flex;align-items:center;gap:9px;width:100%;font-size:13px;color:var(--ink);background:transparent;border:0;padding:6px 8px;cursor:pointer;text-align:left;user-select:none}
   .menu button:hover,.menu a:hover,.fopt:hover{background:var(--paper)}
   .menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
@@ -541,23 +548,34 @@ function noteActs(file, extra = [], reveal) { // reveal: the file Show in Finder
   if ((reveal || file) && NATIVE) items.push({ label: 'Show in Finder', on: `ycReveal(event, ${jsArg(absPath(reveal || file))})` });
   if (file) items.push({ label: 'Copy file path', on: `ycCopy(event, ${jsArg(absPath(file))}, 'Path copied')` });
   const a = (x, cls) => x.href ? `<a class="${cls}" href="${esc(x.href)}"${/^(https?|obsidian|file):/.test(x.href) ? ' data-ext="1"' : ''}${x.edit ? ' data-edit' : ''}>${esc(x.label)}</a>` : `<button type="button" class="${cls}" onclick="${x.on}">${esc(x.label)}</button>`;
-  return `${primary ? a(primary, 'btn primary') : ''}${items.length ? `<div class="dd"><button class="btn" type="button" data-dd title="More">•••</button><div class="menu right" hidden>${items.map(x => a(x, '')).join('')}</div></div>` : ''}`;
+  return `${primary ? a(primary, 'btn primary') : ''}${items.length ? `<div class="dd"><button class="btn" type="button" data-dd title="More">•••</button><div class="menu end" hidden>${items.map(x => a(x, '')).join('')}</div></div>` : ''}`;
 }
+function placeMenu(b, m) { // fixed, under the button (or above it near the bottom), kept inside the window
+  const r = b.getBoundingClientRect(); m.style.position = 'fixed'; m.style.right = 'auto'; const w = m.offsetWidth, hgt = m.offsetHeight;
+  const left = m.classList.contains('end') ? r.right - w : r.left; m.style.left = Math.max(8, Math.min(left, innerWidth - w - 8)) + 'px';
+  m.style.top = (r.bottom + 6 + hgt > innerHeight - 8 && r.top - 6 - hgt > 8 ? r.top - 6 - hgt : r.bottom + 6) + 'px';
+}
+const closeMenus = () => document.querySelectorAll('.dd .menu:not([hidden])').forEach(m => { m.hidden = true; m.previousElementSibling && m.previousElementSibling.setAttribute('aria-expanded', 'false'); });
+window.addEventListener('scroll', closeMenus, true); window.addEventListener('resize', closeMenus);
 document.addEventListener('click', ev => { // dropdown menus: one open at a time, a click elsewhere closes
   const b = ev.target.closest('[data-dd]'); const open = document.querySelectorAll('.dd .menu:not([hidden])');
   open.forEach(m => { if (!b || m !== b.nextElementSibling) m.hidden = true; });
-  if (b) { ev.preventDefault(); b.nextElementSibling.hidden = !b.nextElementSibling.hidden; }
+  if (b) { ev.preventDefault(); ev.stopPropagation(); const m = b.nextElementSibling; m.hidden = !m.hidden; b.setAttribute('aria-expanded', !m.hidden); if (!m.hidden) placeMenu(b, m); }
   else if (ev.target.closest('.dd .menu a, .dd .menu button')) ev.target.closest('.menu').hidden = true;
 });
-function settingsFold(kind, x) { // status + delete, folded at the end of the facts panel (inside the app only)
+const STATUS_KIND = { project: 'project', doc: 'doc', person: 'person' };
+function statusPick(kind, x) { // the status pill opens a menu with the other statuses
+  const cur = x.status || ''; if (!NATIVE || !x.file || !STATUS_OPTS[kind]) return statusPill(cur);
+  const opts = STATUS_OPTS[kind].slice(); if (cur && !opts.includes(cur)) opts.unshift(cur);
+  return `<span class="dd"><button type="button" class="pillbtn" data-dd title="Change status" aria-expanded="false">${statusPill(cur) || pill('no status', 'line')}</button><div class="menu stmenu" hidden>${opts.map(o => `<button type="button" data-status="${esc(o)}" data-file="${esc(x.file)}" data-cat="${esc(x.category || '')}" aria-pressed="${o === cur}">${statusPill(o)}${o === cur ? '<span class="tick">✓</span>' : ''}</button>`).join('')}</div></span>`;
+}
+function settingsFold(kind, x) { // delete, folded at the end of the facts panel (inside the app only; the status is the pill above)
   if (!NATIVE || !x.file || !x.file.endsWith('.md') || !STATUS_OPTS[kind]) return '';
-  const cur = x.status || ''; const opts = STATUS_OPTS[kind].slice(); if (cur && !opts.includes(cur)) opts.unshift(cur);
   return `<details class="settings"><summary>Settings</summary>
-    <div class="fld"><label>Status</label><span class="seg">${opts.map(o => `<button type="button" data-status="${esc(o)}" data-file="${esc(x.file)}" aria-pressed="${o===cur}">${esc(o)}</button>`).join('')}</span><div class="help">Writes <code>status:</code> in the note.</div></div>
     <div class="fld"><label>Delete</label><button class="btn danger sm" type="button" data-trash="${esc(x.file)}" data-back="${LIST_OF[kind]}">Move to trash</button><div class="help">Moves the note to <code>.trash/</code> in the vault. Recoverable.</div></div></details>`;
 }
 document.addEventListener('click', ev => {
-  const s = ev.target.closest('[data-status]'); if (s) { if (s.getAttribute('aria-pressed') === 'true') return; nativeSend({ status: { file: s.dataset.file, status: s.dataset.status } }, 'Status → ' + s.dataset.status); return; }
+  const s = ev.target.closest('[data-status]'); if (s) { if (s.getAttribute('aria-pressed') === 'true') return; nativeSend({ status: { file: s.dataset.file, status: s.dataset.status, category: s.dataset.cat || '' } }, 'Status: ' + s.dataset.status); return; }
   const t = ev.target.closest('[data-trash]'); if (!t) return; // delete asks for a second click (WKWebView shows no confirm() dialogs)
   if (!t.classList.contains('armed')) { t.classList.add('armed'); t.textContent = 'Click again to delete'; clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove('armed'); t.textContent = 'Move to trash'; }, 5000); return; }
   location.hash = t.dataset.back; nativeSend({ trash: { file: t.dataset.trash } }, 'Moved to trash');
@@ -612,7 +630,7 @@ function tableHtml(cols, rows, sort, opts = {}) {
   let body = '', cur = null; const grouping = opts.group && (!sort || opts.group.keys.includes(sort.k));
   for (const r of rows) {
     if (grouping) { const gk = opts.group.of(r); if (gk !== cur) { cur = gk; body += `<tr class="grp"><td colspan="${cols.length}">${opts.group.label(gk)}</td></tr>`; } }
-    body += `<tr class="${opts.href || opts.attr ? 'row' : ''} ${opts.rowCls ? opts.rowCls(r) : ''}" ${opts.href ? `onclick="location.hash='${opts.href(r)}'"` : ''} ${opts.attr ? opts.attr(r) : ''}>${cols.map(c => { const v = c.r(r); return `<td class="${c.num ? 'num' : ''} ${typeof c.cls === 'function' ? c.cls(r) : c.cls || ''}" ${typeof c.style === 'function' ? `style="${c.style(r)}"` : ''}>${v === '' || v == null ? dash : v}</td>`; }).join('')}</tr>`;
+    body += `<tr class="${opts.href || opts.attr ? 'row' : ''} ${opts.rowCls ? opts.rowCls(r) : ''}" ${opts.href ? `onclick="if(!event.target.closest('.dd,.rowact'))location.hash='${opts.href(r)}'"` : ''} ${opts.attr ? opts.attr(r) : ''}>${cols.map(c => { const v = c.r(r); return `<td class="${c.num ? 'num' : ''} ${typeof c.cls === 'function' ? c.cls(r) : c.cls || ''}" ${typeof c.style === 'function' ? `style="${c.style(r)}"` : ''}>${v === '' || v == null ? dash : v}</td>`; }).join('')}</tr>`;
   }
   return `<div class="tscroll"><table class="grid fx"><colgroup>${cols.map(c => c.w ? `<col style="width:${c.w}">` : '<col>').join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="dim">${opts.empty || 'Nothing matches these filters.'}</td></tr>`}</tbody></table></div>`;
 }
@@ -954,7 +972,7 @@ P.projects = () => {
       { k: 'last', l: 'Ended', w: '100px', num: true, cls: 'dim', v: p => p.lastActivity || null, dd: 'desc', r: p => p.lastActivity || '' },
       { k: 'hours', l: 'Hours', w: '70px', num: true, v: p => p.totalHours || null, r: p => p.totalHours || '' },
     ] : [
-      ...(groupBy === 'status' && tree ? [] : [{ k: 'status', l: 'Status', w: '90px', v: p => ordIdx(PROJ_STATUS_ORDER, p.status), r: p => statusPill(p.status) }]),
+      ...(groupBy === 'status' && tree ? [] : [{ k: 'status', l: 'Status', w: '100px', v: p => ordIdx(PROJ_STATUS_ORDER, p.status), r: p => statusPick('project', p) }]),
       { k: 'open', l: 'Open tasks', w: '90px', num: true, v: p => openN(p) || null, r: p => openN(p) || '' },
       { k: 'hours', l: 'Hours', w: '70px', num: true, v: p => p.totalHours || null, r: p => p.totalHours || '' },
       { k: 'last', l: 'Last activity', w: '110px', num: true, cls: 'dim', v: p => p.lastActivity || null, dd: 'desc', r: p => p.lastActivity || '' },
@@ -985,7 +1003,7 @@ P.project = (id) => {
     ${rs.length?sec('Repos', rs.length, rowsTable(rs, r => `<td class="name">${esc(r.name)}${r.description?`<small class="clip2">${esc(r.description)}</small>`:''}</td><td style="width:140px;text-align:right">${repoLinkBtns(r)}</td>`, r => '#/repo/' + r.id)):''}
     ${assets.length?sec('Assets', assets.length, rowsTable(assets, a => `<td class="name">${esc(a.name)}<small>${esc(a.ext)}</small></td><td class="num dim" style="width:100px">${a.edited}</td>`, a => '#/asset/' + a.id)):''}
     ${timeline(p.entries,'Log')}${backlinksHtml('project',id)}`,
-    aside: kv([['Status', statusPill(p.status)], ['Category', esc(p.category)], ['Part of', p.parent ? link('project', p.parent) : ''], ['Started', p.started], ['Hours', `${p.totalHours}h <span class="none-v">· ${plural(p.entries.length,'entry','entries')}${p.children.length&&p.totalHours!==p.hours?` · ${p.hours}h direct`:''}</span>`], ['Last activity', p.lastActivity || ''], ['People', links('person', p.people)], ['Tags', tagsHtml(p.tags)]]) + settingsFold('project', p) };
+    aside: kv([['Status', statusPick('project', p)], ['Category', esc(p.category)], ['Part of', p.parent ? link('project', p.parent) : ''], ['Started', p.started], ['Hours', `${p.totalHours}h <span class="none-v">· ${plural(p.entries.length,'entry','entries')}${p.children.length&&p.totalHours!==p.hours?` · ${p.hours}h direct`:''}</span>`], ['Last activity', p.lastActivity || ''], ['People', links('person', p.people)], ['Tags', tagsHtml(p.tags)]]) + settingsFold('project', p) };
 };
 P.people = () => {
   const st = fstate('people', { sort: { k: 'last', d: 'desc' } });
@@ -1014,7 +1032,7 @@ P.person = (id) => {
     html: `${p.bodyHtml?sec('Notes', null, noteBody(p.bodyHtml)):''}
     ${ts.length||NATIVE?sec('Open tasks', ts.length, `<div class="${NATIVE?'editable':''}">${ts.map(t=>taskRow(t,{showPri:true})).join('')||'<div class="empty">No open tasks.</div>'}</div>`, { tools: taskAddBtn({ people: [p.name] }, 'Add task') }):''}
     ${timeline(p.entries,'Contact history')||sec('Contact history', 0, '<div class="empty">No log entries link this person yet.</div>')}${backlinksHtml('person',id)}`,
-    aside: kv([['Role', esc(p.role)], ['Organization', esc(p.organization)], ['Relationship', esc(p.relationship)], ['Location', esc(p.location)],
+    aside: kv([['Status', statusPick('person', p)], ['Role', esc(p.role)], ['Organization', esc(p.organization)], ['Relationship', esc(p.relationship)], ['Location', esc(p.location)],
       ['Email', p.email ? `<a class="wl" href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ''], ['Phone', p.phone ? `<a class="wl" href="tel:${esc(p.phone.replace(/\s/g,''))}">${esc(p.phone)}</a>` : ''],
       ['LinkedIn', p.linkedin ? `<a class="wl ext" href="${esc(p.linkedin)}" target="_blank">${esc(p.linkedin.replace(/^https?:\/\/(www\.)?(linkedin\.com\/in\/)?/,'').replace(/\/$/,''))}</a>` : ''],
       ['Last contact', p.lastContact || ''], ['Projects', links('project', p.projects)], ['Tags', tagsHtml(p.tags)]]) + settingsFold('person', p) };
@@ -1034,7 +1052,7 @@ P.library = () => {
   const cols = [
     { k: 'name', l: 'Title', cls: 'name', v: d => d.name, r: d => `${esc(d.name)}${d.open ? '<span class="ext"></span>' : ''}${finderAct(d.bundle ? 'Library/' + d.bundle : d.open || d.file)}<small>${catHtml(d.category)}</small>` },
     { k: 'project', l: 'Project', w: '16%', v: d => d.project ? projName(d.project) : null, r: d => d.project ? link('project', d.project) : '' },
-    { k: 'status', l: 'Status', w: '90px', v: d => ['live', 'draft', 'archived'].indexOf(d.status), r: d => statusPill(d.status) },
+    { k: 'status', l: 'Status', w: '100px', v: d => ['live', 'draft', 'archived'].indexOf(d.status), r: d => statusPick('doc', d) },
     { k: 'pub', l: 'Shared', w: '210px', cls: 'nowrap', v: d => (d.pub || {}).date || null, dd: 'desc', r: d => pubHtml(d) + copyBtn(d) },
     { k: 'added', l: 'Added', w: '100px', num: true, cls: 'dim', v: d => d.added, dd: 'desc', r: d => d.added },
     { k: 'edited', l: 'Edited', w: '100px', num: true, cls: 'dim', v: d => d.edited, dd: 'desc', r: d => d.edited },
@@ -1054,9 +1072,9 @@ P.doc = (id) => {
   return { title: d.name, crumbs: [['Library', '#/library']], sub: [catHtml(d.category), d.project ? link('project', d.project) : ''].filter(Boolean).join('<span class="sep">·</span>'), acts: noteActs(d.file, extra, d.bundle ? 'Library/' + d.bundle : d.open || d.file),
     html: `${d.bodyHtml?`<div class="body">${d.bodyHtml}</div>`:(d.open?`<div class="empty">An HTML document. <a class="wl ext" href="${fileHref(d.open)}" target="_blank">Open it</a>, or add <code>Library/${esc(d.stem)}.md</code> to describe it.</div>`:'')}
     <div style="margin-top:40px">${timeline(backlinksOf('doc',id).filter(b=>b.type==='day').map(b=>b.entry),'Mentioned in log', { open: false })}${backlinksHtml('doc',id)}</div>`,
-    aside: kv([['Status', statusPill(d.status)], ['Category', catHtml(d.category)], ['Project', d.project ? link('project', d.project) : ''], ['Added', d.added], ['Edited', d.edited],
+    aside: kv([['Status', statusPick('doc', d)], ['Category', catHtml(d.category)], ['Project', d.project ? link('project', d.project) : ''], ['Added', d.added], ['Edited', d.edited],
       ['Shared', (pubHtml(d) || '<span class="none-v">Not published</span>') + copyBtn(d) + (pubd ? `<div class="none-v" style="font-size:12px;margin-top:2px">Publish/${esc(d.pubFile)}</div>` : `<div class="none-v" style="font-size:12px;margin-top:2px">/publish ${esc(d.stem)}</div>`)],
-      ['File', d.open ? `<a class="wl ext" href="${fileHref(d.open)}" target="_blank">${esc(d.open.split('/').pop())}</a>` : `<span class="none-v">${esc(d.file)}</span>`], ['Tags', tagsHtml(d.tags)]]) + (isMd ? settingsFold('doc', d) : '') };
+      ['File', d.open ? `<a class="wl ext" href="${fileHref(d.open)}" target="_blank">${esc(d.open.split('/').pop())}</a>` : `<span class="none-v">${esc(d.file)}</span>`], ['Tags', tagsHtml(d.tags)]]) + settingsFold('doc', d) };
 };
 // Assets: cards (thumbnails) or a table; grouped by folder (Assets/ may have subfolders), project or month.
 const isImg = (a) => ['png','jpg','jpeg','gif','webp','svg'].includes(a.ext);
@@ -1152,7 +1170,7 @@ P.repo = (id) => {
   if (NATIVE) extra.push({ label: 'Show in Finder', on: `ycReveal(event, ${jsArg(r.path)})` });
   const items = extra.filter(x => !x.primary);
   return { title: r.name, crumbs: [['Repos', '#/repos']], sub: esc(r.description || ''),
-    acts: `${r.url ? `<a class="btn primary" href="${esc(r.url)}" data-ext="1">Open on ${esc(r.host)}</a>` : ''}${items.length ? `<div class="dd"><button class="btn" type="button" data-dd>•••</button><div class="menu right" hidden>${items.map(x => `<button type="button" onclick="${x.on}">${esc(x.label)}</button>`).join('')}</div></div>` : ''}`,
+    acts: `${r.url ? `<a class="btn primary" href="${esc(r.url)}" data-ext="1">Open on ${esc(r.host)}</a>` : ''}${items.length ? `<div class="dd"><button class="btn" type="button" data-dd>•••</button><div class="menu end" hidden>${items.map(x => `<button type="button" onclick="${x.on}">${esc(x.label)}</button>`).join('')}</div></div>` : ''}`,
     html: r.readmeHtml ? sec('README', null, `<div class="body" style="margin-top:14px">${r.readmeHtml}</div>`) : `<div class="empty">No README in <code>${esc(r.home)}</code>.</div>`,
     aside: kv([['Project', r.project ? link('project', r.project) : ''], ['Owner', r.owner ? `${ownerHtml(r)} <span class="dim">${esc(r.owner)}</span>` : '<span class="none-v">No remote, local only</span>'], ['Branch', branchHtml(r)], ['Last change', `${r.lastDate}${r.lastMsg ? `<div class="none-v" style="font-size:13px">${esc(r.lastMsg)}</div>` : ''}`], ['Type', esc(r.stack)], ['Folder', `<code>${esc(r.home)}</code>`]]) };
 };

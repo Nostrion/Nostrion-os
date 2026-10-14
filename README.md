@@ -14,7 +14,7 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 
 ## How it works
 
-**Source of truth = the Markdown files.** The hub is a view. Inside the app it can also write: task lines (tick, edit, add), a note's `status:`, moving a note to `.trash/`, the whole note in the built-in editor, and `app/config.json` from Settings. Edit in the app, in Obsidian or in any editor; the hub redraws itself when a file changes.
+**Source of truth = the Markdown files.** The hub is a view. Inside the app it can also write: task lines (tick, edit, add), a status (click the status pill in Projects, Library or on a page: `status:` in a note, the `ycos:status` tag in an HTML file, a same-name note for a PDF), moving a note to `.trash/`, the whole note in the built-in editor, and `app/config.json` from Settings. Edit in the app, in Obsidian or in any editor; the hub redraws itself when a file changes.
 
 ## Folders
 

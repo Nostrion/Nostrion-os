@@ -4,7 +4,7 @@
 //   node app/datename.js           dry run: what would be renamed, and which notes link to it
 //   node app/datename.js --apply   rename, rewrite the links in the vault's Markdown (and canvas) files, update app/publish-state.json
 //
-// The date: `added:` (Markdown frontmatter) or <meta name="ycos:added"> (HTML); otherwise the file's creation or modification
+// The date: `added:` (Markdown frontmatter) or <meta name="os:added"> (HTML; the older hub:added and ycos:added are still read); otherwise the file's creation or modification
 // date, whichever is earlier. A sidecar note (same name, .md) gets the same prefix as its file. Names that already start with
 // a date are left alone. Published copies in OneDrive keep their old names, so links already shared keep working
 // (publish.js and the hub find a copy through app/publish-state.json, or by the name without the date).
@@ -18,7 +18,7 @@ const day = (d) => d.toISOString().slice(0, 10);
 const fileDay = (p) => { const st = fs.statSync(p); const b = st.birthtime && st.birthtime.getTime() > 0 ? st.birthtime : st.mtime; return day(b < st.mtime ? b : st.mtime); };
 const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim());
 const fmAdded = (p) => { const m = fs.readFileSync(p, 'utf8').match(/^---\n([\s\S]*?)\n---/); const a = m && m[1].match(/^added:\s*["']?(\d{4}-\d{2}-\d{2})/m); return a ? a[1] : ''; };
-const htmlAdded = (p) => { const m = fs.readFileSync(p, 'utf8').match(/<meta\s+[^>]*name=["']ycos:added["'][^>]*content=["'](\d{4}-\d{2}-\d{2})/i); return m ? m[1] : ''; };
+const htmlAdded = (p) => { const m = fs.readFileSync(p, 'utf8').match(/<meta\s+[^>]*name=["'](?:os|hub|ycos):added["'][^>]*content=["'](\d{4}-\d{2}-\d{2})/i); return m ? m[1] : ''; };
 const stemOf = (n) => n.replace(/\.[^.]+$/, '');
 const visible = (dir) => fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => !n.startsWith('.')) : [];
 

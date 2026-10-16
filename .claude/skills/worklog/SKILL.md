@@ -87,13 +87,13 @@ Leave a field empty rather than guessing (`people:: `). Write with a quoted here
   ```
   Ask for role/organization only if unknown and it matters, in the same question as step 2.
 - New project mentioned → create `Projects/<Name>.md` with `name`, `description` (one line), `category` (client · product · internal · personal — who the work is for), `status: active` (or `status: idea` when it is only an idea, not started; other statuses: paused · done · archived), `parent: "[[Parent]]"` if it belongs under a bigger project (e.g. a subproject of Website relaunch), `started: <first logged day>`, `people: [...]`. If an entry predates a project's `started`, move `started` back to that day.
-- An HTML document produced this session or pointed to by the user (prototype, report, brief, tool) → copy it into `Library/` as `<YYYY-MM-DD>_<slug>.html`: the day it was made (same as `ycos:added`), an underscore, then a slug starting with the project, e.g. `2026-10-05_acme-pilot-week-four-report.html`. Link it as `[[2026-10-05_acme-pilot-week-four-report]]`. **No `.md` sidecar.** Put its details as meta tags just before `</head>` (python read-modify-write, don't retype the file):
+- An HTML document produced this session or pointed to by the user (prototype, report, brief, tool) → copy it into `Library/` as `<YYYY-MM-DD>_<slug>.html`: the day it was made (same as `os:added`), an underscore, then a slug starting with the project, e.g. `2026-10-05_acme-pilot-week-four-report.html`. Link it as `[[2026-10-05_acme-pilot-week-four-report]]`. **No `.md` sidecar.** Put its details as meta tags just before `</head>` (python read-modify-write, don't retype the file):
   ```html
-  <meta name="ycos:title" content="Acme pilot — week four report">
-  <meta name="ycos:category" content="research">
-  <meta name="ycos:project" content="Acme pilot">
-  <meta name="ycos:status" content="live">
-  <meta name="ycos:added" content="2026-09-25">
+  <meta name="os:title" content="Acme pilot — week four report">
+  <meta name="os:category" content="research">
+  <meta name="os:project" content="Acme pilot">
+  <meta name="os:status" content="live">
+  <meta name="os:added" content="2026-09-25">
   ```
   Categories: research · framework · brief · report · tool · reference · post · note, or a new one when none fits (the hub picks any value up automatically; prefer an existing one). Status: live · draft · archived (an old version the user wants to keep → archived, in `Library/`, never in `Assets/` — the builder rejects HTML there). Clicking it in the hub opens the page directly. Link it from the entry with `[[<slug>]]`. Sharing it with others is a separate step: the `publish` skill (`node app/publish.js <slug>`) — only when the user asks.
 - A written note (no HTML) → `Library/<YYYY-MM-DD>_<slug>.md` with frontmatter `title`, `category`, `project`, `status`, `added`.

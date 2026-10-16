@@ -98,7 +98,7 @@ function editTask(io, ROOT, req) {
 const NOTE_FILE = /^(Projects|Library|People)\/[^/]+\.md$/; // only markdown notes in these folders; HTML documents keep their meta tags
 // req: {file (vault-relative), status, category?} → sets the status where that kind of file keeps it:
 //   a note (.md in Projects/, Library/, People/): `status:` in the frontmatter (added when missing)
-//   an HTML document in Library/ (or the main page of a folder document): <meta name="ycos:status">
+//   an HTML document in Library/ (or the main page of a folder document): <meta name="os:status"> (an older hub:status or ycos:status tag is replaced)
 //   any other Library file (pdf, Office…): a note next to it with the same name, created when missing, holds the status
 const LIB_HTML = /^Library\/(?!\.)[^/]+(?:\/(?!\.)[^/]+)?\.html?$/i, LIB_FILE = /^Library\/(?!\.)[^/]+\.(?!md$)[A-Za-z0-9]+$/;
 function editStatus(io, ROOT, req) {
@@ -106,8 +106,8 @@ function editStatus(io, ROOT, req) {
   const status = String(req.status || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9 -]*$/.test(status)) return { ok: false, error: 'not a valid status: ' + req.status };
   if (LIB_HTML.test(file)) {
     const p = ROOT + '/' + file; if (!io.exists(p)) return { ok: false, error: file + ' no longer exists' };
-    let src = io.read(p); const tag = '<meta name="ycos:status" content="' + status + '">';
-    const re = /<meta\s+[^>]*name=["']ycos:status["'][^>]*>/i;
+    let src = io.read(p); const tag = '<meta name="os:status" content="' + status + '">';
+    const re = /<meta\s+[^>]*name=["'](?:os|hub|ycos):status["'][^>]*>/i;
     if (re.test(src)) src = src.replace(re, tag);
     else if (/<meta\s+charset[^>]*>/i.test(src)) src = src.replace(/(<meta\s+charset[^>]*>)/i, '$1\n' + tag);
     else if (/<head[^>]*>/i.test(src)) src = src.replace(/(<head[^>]*>)/i, '$1\n' + tag);
@@ -180,7 +180,7 @@ const OUT = join(ROOT, 'app', 'index.html');
 const TEMPLATE = join(ROOT, 'app', 'template.html');
 const CATEGORIES = ['meeting', 'build', 'research', 'writing', 'admin', 'learning'];
 const PRIORITIES = ['do', 'plan', 'delegate', 'later']; // Eisenhower: urgent+important · important · urgent · neither
-const LIBRARY_CATEGORIES = ['research', 'framework', 'brief', 'report', 'tool', 'reference', 'post', 'note']; // display order only: any other value in ycos:category works and is listed after these
+const LIBRARY_CATEGORIES = ['research', 'framework', 'brief', 'report', 'tool', 'reference', 'post', 'note']; // display order only: any other value in os:category works and is listed after these
 const CONFIG = CONFIG0; // app/config.json (Settings in the app writes it, saveConfig)
 const PUBLISH_DIR = String(CONFIG.publishDir || '').replace(/^~(?=\/|$)/, io.home()); // copies of shared Library docs live here (OneDrive)
 const SHARE_BASE = String(CONFIG.shareBase || '').replace(/\/+$/, ''); // web address of that folder → per-file links in the hub
@@ -290,9 +290,10 @@ function inline(text, resolve) {
   s = s.replace(/(^|\s)#([a-zA-Z][\w\/-]*)/g, '$1<span class="tag">#$2</span>');
   return s;
 }
-function htmlMeta(src) { // <meta name="ycos:project" content="Acme pilot"> … inside an .html document
-  const out = {}; const re = /<meta\s+[^>]*name=["']ycos:([\w-]+)["'][^>]*content=["']([^"']*)["'][^>]*>/gi; let m;
-  while ((m = re.exec(src))) out[m[1].toLowerCase()] = m[2].replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
+function htmlMeta(src) { // <meta name="os:project" content="Acme pilot"> … inside an .html document
+  // os: is the prefix; ycos: and hub: are older ones, still read for published copies and older files. os: wins, then hub:, then ycos:
+  const RANK = { os: 3, hub: 2, ycos: 1 }, out = {}, rank = {}; const re = /<meta\s+[^>]*name=["'](os|hub|ycos):([\w-]+)["'][^>]*content=["']([^"']*)["'][^>]*>/gi; let m;
+  while ((m = re.exec(src))) { const k = m[2].toLowerCase(), r = RANK[m[1].toLowerCase()]; if ((rank[k] || 0) > r) continue; out[k] = m[3].replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim(); rank[k] = r; }
   return out;
 }
 const FIELD = /\((\w+)::\s*([^)]*)\)/g;

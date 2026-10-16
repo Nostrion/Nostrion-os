@@ -14,7 +14,7 @@ Manual install: `git clone https://github.com/Nostrion/Nostrion-os ~/Nostrion-os
 
 ## How it works
 
-**Source of truth = the Markdown files.** The hub is a view. Inside the app it can also write: task lines (tick, edit, add), a status (click the status pill in Projects, Library or on a page: `status:` in a note, the `ycos:status` tag in an HTML file, a same-name note for a PDF), moving a note to `.trash/`, the whole note in the built-in editor, and `app/config.json` from Settings. Edit in the app, in Obsidian or in any editor; the hub redraws itself when a file changes.
+**Source of truth = the Markdown files.** The hub is a view. Inside the app it can also write: task lines (tick, edit, add), a status (click the status pill in Projects, Library or on a page: `status:` in a note, the `os:status` tag in an HTML file, a same-name note for a PDF), moving a note to `.trash/`, the whole note in the built-in editor, and `app/config.json` from Settings. Edit in the app, in Obsidian or in any editor; the hub redraws itself when a file changes.
 
 ## Folders
 
@@ -147,7 +147,7 @@ Add `parent: "[[Website relaunch]]"` to a project. The parent lists its subproje
 
 Every file in `Library/` and `Assets/` starts with the day it was made, then an underscore: `2026-10-06_homepage-directions.md`, `2026-10-08_Acme pilot - contract.pdf`. Finder, OneDrive and the hub list them in order, and the name is enough to cite and find a document (search the hub for `2026-10-06_` or part of the name).
 
-- The date is when the document was made, not last edited: `added` in the frontmatter or `ycos:added` meta tag, else the file's creation date. It never changes when the file is edited.
+- The date is when the document was made, not last edited: `added` in the frontmatter or `os:added` meta tag, else the file's creation date. It never changes when the file is edited.
 - After the underscore: Library documents in kebab case starting with the project (`acme-pilot-week-four-report`), Assets as readable names starting with the project (`Acme pilot - contract`). A sidecar `.md` has the same name as its file.
 - The hub shows titles without the date, and the name without its date still works as a link (`[[homepage-directions]]`) when nothing else has that name.
 - Dropped a file without a date? The build warns. `node app/datename.js` lists what it would rename; `node app/datename.js --apply` renames, rewrites `[[links]]` and `Library/…` / `Assets/…` paths in every note, and rebuilds the hub.
@@ -160,14 +160,14 @@ Every file in `Library/` and `Assets/` starts with the day it was made, then an 
 **Document files** (pdf, Word, PowerPoint, Excel, Keynote, Pages, Numbers) live in `Library/` too, category *document*; a `.md` with the same name describes one, and its page opens the file. In the app, hovering a row in Library or the Assets table shows **Show in Finder**.
 
   ```html
-  <meta name="ycos:title" content="Acme pilot — week four report">
-  <meta name="ycos:category" content="research">
-  <meta name="ycos:project" content="Acme pilot">
-  <meta name="ycos:status" content="live">
-  <meta name="ycos:added" content="2026-09-25">
+  <meta name="os:title" content="Acme pilot — week four report">
+  <meta name="os:category" content="research">
+  <meta name="os:project" content="Acme pilot">
+  <meta name="os:status" content="live">
+  <meta name="os:added" content="2026-09-25">
   ```
 
-  Without these tags the hub uses the page `<title>`, and a file name that starts with a project name (`acme-…`, `Nostrion - …`) is linked to that project.
+  Older documents with `ycos:` or `hub:` tags still work: the hub reads them too (`os:` wins), and changing a status writes an `os:status` tag. Without these tags the hub uses the page `<title>`, and a file name that starts with a project name (`acme-…`, `Nostrion - …`) is linked to that project.
 - **Markdown note**: `Library/YYYY-MM-DD_name.md` with frontmatter `title`, `category`, `project`, `status`, `added`.
 - `category` is free text. Known values (research · framework · brief · report · tool · reference · post · note) have a fixed colour and order; any new value is picked up automatically, gets its own colour and is shown by default in every filter.
 - Categories: **research · framework · brief · report · tool · reference · post · note**. Status: `draft · live · archived`.

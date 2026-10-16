@@ -47,14 +47,14 @@ function docs() {
   for (const n of names.filter(n => !n.endsWith('.md'))) {
     const stem = n.replace(/\.[^.]+$/, ''); if (mdStems.has(stem)) continue;
     let title = stem;
-    if (/\.html?$/i.test(n)) { const src = fs.readFileSync(path.join(LIB, n), 'utf8'); const m = src.match(/<meta\s+name="ycos:title"\s+content="([^"]*)"/i) || src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim(); }
+    if (/\.html?$/i.test(n)) { const src = fs.readFileSync(path.join(LIB, n), 'utf8'); const m = src.match(/<meta\s+name="(?:os|hub|ycos):title"\s+content="([^"]*)"/i) || src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim(); }
     out.push({ stem, title, src: 'Library/' + n });
   }
   for (const n of fs.readdirSync(LIB).filter(n => !n.startsWith('.') && fs.statSync(path.join(LIB, n)).isDirectory())) { // bundles
     const files = fs.readdirSync(path.join(LIB, n)).filter(f => !f.startsWith('.') && fs.statSync(path.join(LIB, n, f)).isFile()).sort();
     const main = files.includes(n + '.html') ? n + '.html' : files.includes(undate(n) + '.html') ? undate(n) + '.html' : files.includes('index.html') ? 'index.html' : files.find(f => /\.html?$/i.test(f));
     if (!main) continue;
-    let title = n; const src = fs.readFileSync(path.join(LIB, n, main), 'utf8'); const m = src.match(/<meta\s+name="ycos:title"\s+content="([^"]*)"/i) || src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim();
+    let title = n; const src = fs.readFileSync(path.join(LIB, n, main), 'utf8'); const m = src.match(/<meta\s+name="(?:os|hub|ycos):title"\s+content="([^"]*)"/i) || src.match(/<title>([^<]*)<\/title>/i); if (m) title = m[1].trim();
     out.push({ stem: n, title, src: 'Library/' + n, bundle: true, files });
   }
   // the copy keeps the name it was first published under, so links already shared keep working: the name recorded for this
@@ -152,7 +152,7 @@ else for (const q of names) {
 if (!targets.length) { console.log(remove ? 'nothing to remove' : 'nothing outdated — every published copy is current'); process.exit(0); }
 
 // ---- moving: the vault file goes, a link note with the same name stays ----
-const META = (src, k) => { const m = src.match(new RegExp('<meta\\s+[^>]*name=["\']ycos:' + k + '["\'][^>]*content=["\']([^"\']*)["\']', 'i')); return m ? m[1].trim() : ''; };
+const META = (src, k) => { const m = src.match(new RegExp('<meta\\s+[^>]*name=["\']os:' + k + '["\'][^>]*content=["\']([^"\']*)["\']', 'i')) || src.match(new RegExp('<meta\\s+[^>]*name=["\']hub:' + k + '["\'][^>]*content=["\']([^"\']*)["\']', 'i')) || src.match(new RegExp('<meta\\s+[^>]*name=["\']ycos:' + k + '["\'][^>]*content=["\']([^"\']*)["\']', 'i')); return m ? m[1].trim() : ''; };
 const yaml = (v) => /^[\w .,()&+-]*$/.test(v) && !/^\d/.test(v) ? v : JSON.stringify(v);
 function linkNote(d) { // the note that stays in Library: the file's own frontmatter/meta, plus file: → OneDrive
   const tilde = (p) => p.startsWith(os.homedir() + '/') ? '~' + p.slice(os.homedir().length) : p;
